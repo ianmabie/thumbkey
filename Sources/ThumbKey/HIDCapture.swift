@@ -35,7 +35,7 @@ final class HIDCapture {
     var onInput:((UInt32,Bool,ButtonBinding?,Bool)->Void)?
     var onHardwarePress:((UInt32)->Void)?
     var onError:((String)->Void)?
-    var onDisconnect:(()->Void)?
+    var onDisconnect:((String)->Void)?
     private static let timebase:mach_timebase_info_data_t={var info=mach_timebase_info_data_t();mach_timebase_info(&info);return info}()
     init(){
         // Other keyboards provide transient collision evidence; their events never run actions.
@@ -71,13 +71,14 @@ final class HIDCapture {
         if interfaces[id] != nil{return}
         interfaces[id]=NagaInterface(id:id,name:name,productID:Self.number(d,kIOHIDProductIDKey),transport:Self.text(d,kIOHIDTransportKey),device:d,layout:layout,isNaga:naga)
         onDevices?(deviceList)
-        if isRunning && !open(id){stop();onDisconnect?()}
+        if isRunning && !open(id){stop();onDisconnect?("Keyboard observation changed.")}
     }
     private func disconnected(_ d:IOHIDDevice){
         let id=Self.identifier(d);guard interfaces[id] != nil else{return}
         // Stop even when a keyboard guard disconnects: no stale device evidence may remain.
+        let name=interfaces[id]?.name ?? "Keyboard"
         let wasRunning=isRunning;stop();interfaces.removeValue(forKey:id);onDevices?(deviceList)
-        if wasRunning{onDisconnect?()}
+        if wasRunning{onDisconnect?("\(name) disconnected.")}
     }
     @discardableResult func start()->Bool{
         stop()
@@ -152,7 +153,7 @@ final class HIDCapture {
     private func filter(type:CGEventType,event:CGEvent,generation current:UUID)->Unmanaged<CGEvent>?{
         guard isCurrent(current) else{return Unmanaged.passUnretained(event)}
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput{
-            DispatchQueue.main.async{[weak self] in guard let self,self.isCurrent(current) else{return};self.stop();self.onDisconnect?();self.onError?("macOS disabled the keyboard filter. Mappings paused and held keys released. Enable mappings to retry.")}
+            DispatchQueue.main.async{[weak self] in guard let self,self.isCurrent(current) else{return};self.stop();self.onDisconnect?("macOS disabled the keyboard filter.")}
             return Unmanaged.passUnretained(event)
         }
         guard type == .keyDown || type == .keyUp,event.getIntegerValueField(.eventSourceUserData) != 0x54484D424B4559 else{return Unmanaged.passUnretained(event)}

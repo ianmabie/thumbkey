@@ -16,8 +16,8 @@ import ThumbKeyCore
     var body:some Scene {
         Window("ThumbKey",id:"main") {ContentView().environmentObject(model).frame(minWidth:920,minHeight:680)}
             .defaultSize(width:1020,height:760)
-            .commands {CommandGroup(replacing:.newItem){};CommandGroup(after:.appSettings){Button(model.enabled ? "Pause mappings":"Enable mappings"){model.toggleEnabled()}.keyboardShortcut("p",modifiers:[.command,.option,.control])}}
-        MenuBarExtra("ThumbKey",systemImage:model.enabled ? "circle.grid.3x3.fill":"circle.grid.3x3") {
+            .commands {CommandGroup(replacing:.newItem){};CommandGroup(after:.appSettings){Button(model.wantsMappings ? "Pause mappings":"Enable mappings"){model.toggleEnabled()}.keyboardShortcut("p",modifiers:[.command,.option,.control])}}
+        MenuBarExtra("ThumbKey",systemImage:model.enabled ? "circle.grid.3x3.fill":"exclamationmark.circle") {
             MenuControls().environmentObject(model)
         }
     }
@@ -27,11 +27,12 @@ struct MenuControls:View {
     @Environment(\.openWindow) var openWindow
     var body:some View {
         Text(model.deviceName)
+        Text(model.mappingStatus)
         Button("Open ThumbKey"){openWindow(id:"main");NSApp.activate(ignoringOtherApps:true)}
-        Button(model.enabled ? "Pause mappings":"Enable mappings"){model.toggleEnabled()}
+        Button(model.wantsMappings ? "Pause mappings":"Enable mappings"){model.toggleEnabled()}
         Divider()
         Button("Release held keys & pause"){model.pause()}
-        Button("Quit ThumbKey"){model.pause();NSApp.terminate(nil)}
+        Button("Quit ThumbKey"){model.shutdown();NSApp.terminate(nil)}
     }
 }
 struct ContentView:View {
@@ -43,8 +44,8 @@ struct ContentView:View {
                 Image(systemName:"circle.grid.3x3.fill").font(.system(size:26)).foregroundStyle(accent)
                 VStack(alignment:.leading,spacing:3){Text("ThumbKey").font(.title2.bold());Text("Twelve buttons. Your shortcuts.").font(.subheadline).foregroundStyle(.secondary)}
                 Spacer()
-                VStack(alignment:.trailing,spacing:4){Label(model.enabled ? "Mappings on":"Mappings paused",systemImage:model.enabled ? "circle.fill":"pause.circle").foregroundStyle(model.enabled ? accent:.secondary).font(.subheadline.weight(.medium));Text(model.deviceName).font(.caption).foregroundStyle(.secondary)}
-                Button(model.enabled ? "Pause":"Enable mappings"){model.toggleEnabled()}.buttonStyle(.borderedProminent).tint(accent)
+                VStack(alignment:.trailing,spacing:4){Label(model.mappingStatus,systemImage:model.enabled ? "circle.fill":"exclamationmark.circle").foregroundStyle(model.enabled ? accent:Color.orange).font(.subheadline.weight(.medium));Text(model.deviceName).font(.caption).foregroundStyle(.secondary)}
+                Button(model.wantsMappings ? "Pause":"Enable mappings"){model.toggleEnabled()}.buttonStyle(.borderedProminent).tint(accent)
             }.padding(24)
             Divider()
             if !model.inputAllowed || !model.accessibilityAllowed {

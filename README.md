@@ -24,7 +24,7 @@ Factory input identities are 1–9, 0, minus, equals. Click **Learn this button*
 
 **Everywhere** is the fallback profile. **Add app profile** creates a copy for a currently running application; the matching profile applies automatically when that app is foreground. Changes save immediately. Import/export JSON via the ellipsis menu. Imports validate size/structure and back up the old configuration before replacement.
 
-The menu bar grid icon opens the editor, pauses mapping, releases all held keys, or quits. Closing the window leaves the menu bar app running. Pause or quit restores the original side-pad behavior. Sleep pauses mapping; enable it again when ready. A disconnected device releases owned keys; macros are cancelled. Held keys have a two-minute release watchdog.
+The menu bar icon opens the editor, pauses mapping, releases all held keys, or quits. Closing the window leaves the menu bar app running. While paused or quit, the side pad sends its original keys (button 1 types `1`). The app remembers whether you enabled mappings and restores that choice after relaunch. Sleep and device/filter interruptions release owned keys and cancel macros; enabled mappings resume after wake or reconnect. Capture startup retries are bounded to three attempts, then show an error and require Enable mappings. Manual Pause and permission loss cancel automatic recovery. A warning menu bar icon and orange status identify mappings that are off or reconnecting. Held keys have a two-minute release watchdog.
 
 ## Device access
 

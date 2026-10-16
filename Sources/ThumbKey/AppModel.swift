@@ -11,6 +11,11 @@ final class AppModel: ObservableObject {
     @Published var learning: Int?
     @Published var lastButton: Int?
     @Published var enabled=false
+    @Published private(set) var recovery=MappingRecovery(requested:UserDefaults.standard.bool(forKey:"mappingsRequested")) {
+        didSet {UserDefaults.standard.set(recovery.requested,forKey:"mappingsRequested")}
+    }
+    var wantsMappings:Bool {recovery.requested}
+    var mappingStatus:String {enabled ? "Mappings on" : wantsMappings ? (recovery.sleeping ? "Waiting for wake":"Reconnecting mappings…") : "Mappings paused"}
     @Published var deviceName="No Naga connected"
     @Published var interfaceCount=0
     @Published var inputAllowed=false
@@ -22,6 +27,7 @@ final class AppModel: ObservableObject {
     private var permissionTimer:Timer?
     private var observers:[NSObjectProtocol]=[]
     private var learnedTimeout:DispatchWorkItem?
+    private var recoveryWork:DispatchWorkItem?
     private var loaded=false
     private let directory=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("ThumbKey")
     var file: URL { directory.appendingPathComponent("bindings.json") }
@@ -38,14 +44,20 @@ final class AppModel: ObservableObject {
         loaded=saveError.isEmpty
         capture.onDevices={ [weak self] devices in self?.updateDevices(devices) }
         capture.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted) }
-        capture.onDisconnect={ [weak self] in self?.pause();self?.message="Input device disconnected or filter stopped. Mappings paused; held keys released." }
+        capture.onDisconnect={ [weak self] reason in self?.interrupted(reason) }
         capture.onError={ [weak self] text in self?.message=text }
         runner.status={ [weak self] text in self?.message=text }
         updateDevices(capture.deviceList); refreshPermissions();updateRouting()
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didActivateApplicationNotification,object:nil,queue:.main){[weak self] _ in self?.updateRouting()})
         permissionTimer=Timer.scheduledTimer(withTimeInterval:2,repeats:true){[weak self] _ in self?.refreshPermissions()}
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main){[weak self] _ in self?.pause();self?.message="Paused for sleep. Enable mappings when you return."})
-        observers.append(NotificationCenter.default.addObserver(forName:NSApplication.willTerminateNotification,object:nil,queue:.main){[weak self] _ in self?.pause()})
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main){[weak self] _ in
+            guard let self else{return};self.recovery.sleep();self.stopCapture();self.message=self.wantsMappings ? "Paused for sleep. Mappings will resume after wake.":"Mappings paused. Side buttons send their original keys."
+        })
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didWakeNotification,object:nil,queue:.main){[weak self] _ in
+            guard let self else{return};self.recovery.wake();self.scheduleRecovery()
+        })
+        observers.append(NotificationCenter.default.addObserver(forName:NSApplication.willTerminateNotification,object:nil,queue:.main){[weak self] _ in self?.shutdown()})
+        if wantsMappings {scheduleRecovery()}
     }
     var profileIndex:Int {configuration.profiles.firstIndex{$0.id==selectedProfile} ?? 0}
     var profile:Profile {configuration.profiles[profileIndex]}
@@ -60,26 +72,46 @@ final class AppModel: ObservableObject {
     private func updateDevices(_ devices:[NagaInterface]) {
         interfaceCount=devices.count
         if let first=devices.first {deviceName="\(first.name) · \(first.transport)"} else {deviceName="No Naga connected"}
+        if wantsMappings && !enabled {recovery.resetAttempts();scheduleRecovery()}
     }
     func refreshPermissions() {
         inputAllowed=IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)==kIOHIDAccessTypeGranted
         accessibilityAllowed=AXIsProcessTrusted()
-        if enabled && (!inputAllowed || !accessibilityAllowed){pause();message="Mappings paused. Grant Input Monitoring and Accessibility, then enable again."}
+        if wantsMappings && (!inputAllowed || !accessibilityAllowed){pause();message="Mappings paused. Grant Input Monitoring and Accessibility, then enable again."}
     }
     func requestInput(){_ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent);openPrivacy("ListenEvent")}
     func requestAccessibility(){let options=[kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String:true] as CFDictionary;_ = AXIsProcessTrustedWithOptions(options);openPrivacy("Accessibility")}
     private func openPrivacy(_ pane:String){if let u=URL(string:"x-apple.systempreferences:com.apple.preference.security?Privacy_\(pane)"){NSWorkspace.shared.open(u)}}
-    func toggleEnabled(){enabled ? pause() : start()}
+    func toggleEnabled(){wantsMappings ? pause() : start()}
     func start() {
+        recovery.enable();attemptStart()
+    }
+    private func attemptStart() {
+        guard wantsMappings,!recovery.sleeping else{return}
+        recoveryWork?.cancel();recoveryWork=nil
         refreshPermissions()
         guard inputAllowed && accessibilityAllowed else {message="Grant both permissions first, then enable mappings.";return}
-        guard interfaceCount>0 else {message="Connect your Naga using its cable or receiver, then retry.";return}
-        guard saveError.isEmpty else {message="Resolve the configuration error before enabling mappings.";return}
+        guard interfaceCount>0 else {message="Waiting for your Naga. Mappings will resume when it reconnects.";return}
+        guard saveError.isEmpty else {pause();message="Resolve the configuration error before enabling mappings.";return}
         message="";updateRouting();let started=capture.start()
-        guard started && capture.capturedCount==interfaceCount else {capture.stop();runner.cancelAll();enabled=false;return}
-        enabled=true;message="Ready. Press a side button to check its mapping."
+        guard started && capture.capturedCount==interfaceCount else {capture.stop();runner.cancelAll();enabled=false;scheduleRecovery();return}
+        enabled=true;recovery.resetAttempts();message="Ready. Press a side button to check its mapping."
     }
-    func pause(){enabled=false;cancelLearning();capture.stop();runner.cancelAll();message=""}
+    private func stopCapture(){recoveryWork?.cancel();recoveryWork=nil;enabled=false;cancelLearning();capture.stop();runner.cancelAll()}
+    func pause(){recovery.pause();stopCapture();message="Mappings paused. Side buttons send their original keys."}
+    func shutdown(){stopCapture()}
+    private func interrupted(_ reason:String){
+        stopCapture();message="\(reason) Held keys released. Reconnecting…";scheduleRecovery()
+    }
+    private func scheduleRecovery(){
+        guard wantsMappings,!recovery.sleeping,recoveryWork==nil else{return}
+        guard interfaceCount>0 else{message="Waiting for your Naga. Mappings will resume when it reconnects.";return}
+        guard let delay=recovery.nextDelay() else{
+            let detail=message;pause();message="Could not resume mappings after three attempts. Enable mappings to retry. \(detail)";return
+        }
+        let work=DispatchWorkItem{[weak self] in self?.recoveryWork=nil;self?.attemptStart()}
+        recoveryWork=work;DispatchQueue.main.asyncAfter(deadline:.now()+delay,execute:work)
+    }
     func learn(){
         if !enabled {start()};guard enabled else{return}
         runner.cancelAll();learning=selectedButton;updateRouting();message="Press physical side button \(selectedButton). Other mappings are paused while learning."
@@ -131,5 +163,5 @@ final class AppModel: ObservableObject {
             loaded=true;configuration=next;selectedProfile=next.profiles[0].id;message="Mappings imported. Previous settings were backed up.";
         } catch {message="Import failed: \(error.localizedDescription)"}
     }
-    deinit{permissionTimer?.invalidate();observers.forEach{NotificationCenter.default.removeObserver($0);NSWorkspace.shared.notificationCenter.removeObserver($0)}}
+    deinit{permissionTimer?.invalidate();recoveryWork?.cancel();observers.forEach{NotificationCenter.default.removeObserver($0);NSWorkspace.shared.notificationCenter.removeObserver($0)}}
 }

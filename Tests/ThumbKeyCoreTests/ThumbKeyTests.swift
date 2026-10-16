@@ -2,6 +2,33 @@ import XCTest
 @testable import ThumbKeyCore
 
 final class ThumbKeyTests:XCTestCase {
+    func testRecoverySurvivesSleepAndReconnectButHonorsManualPause() {
+        var recovery=MappingRecovery()
+        XCTAssertNil(recovery.nextDelay())
+        recovery.enable()
+        XCTAssertEqual(recovery.nextDelay(),0.5)
+        recovery.sleep()
+        XCTAssertTrue(recovery.requested)
+        XCTAssertNil(recovery.nextDelay())
+        recovery.wake()
+        XCTAssertEqual(recovery.nextDelay(),0.5)
+        recovery.pause()
+        recovery.resetAttempts()
+        XCTAssertNil(recovery.nextDelay())
+        XCTAssertFalse(recovery.requested)
+    }
+    func testRecoveryRetriesAreBoundedAndLaunchRestoresOnlyExplicitIntent() {
+        var recovery=MappingRecovery(requested:true)
+        XCTAssertEqual(recovery.nextDelay(),0.5)
+        XCTAssertEqual(recovery.nextDelay(),1)
+        XCTAssertEqual(recovery.nextDelay(),2)
+        XCTAssertNil(recovery.nextDelay())
+        recovery.resetAttempts()
+        XCTAssertEqual(recovery.nextDelay(),0.5)
+        recovery.pause() // Also used when permission is revoked.
+        recovery.wake()
+        XCTAssertNil(recovery.nextDelay())
+    }
     func bytes(_ hex:String)->[UInt8]{stride(from:0,to:hex.count,by:2).map{i in let a=hex.index(hex.startIndex,offsetBy:i);let b=hex.index(a,offsetBy:2);return UInt8(hex[a..<b],radix:16)!}}
     let boot="05010906a101050719e029e715002501750195088102810119002aff00150026ff007508950681000508190129031500250175019503910295059101c0"
     let extended="05010906a1018501050719e029e71500250175019508810219002aff00150026ff007508950e8100c0050c0901a101850219002a3c021500263c029501751081007508950d8101c005010980a10185031981298315002501750195038102950581017508950e8101c005010900a10185040903150026ff00350046ff007508950f8100c005010900a10185050903150026ff00350046ff007508950f8100c0"
