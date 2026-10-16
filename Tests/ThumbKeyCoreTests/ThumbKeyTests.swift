@@ -61,3 +61,55 @@ final class ThumbKeyTests:XCTestCase {
         c=Configuration();c.profiles[0].buttons[0].chord=Chord(keyCode:900);XCTAssertThrowsError(try c.validated())
     }
 }
+
+final class CorrelationTests:XCTestCase {
+    func testNagaEvidenceIsConsumedOnce(){
+        var c=InputCorrelation();c.record(.init(usage:30,down:true,timestamp:1_000_000_000,naga:true,device:1))
+        XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_000_010_000),.naga(30))
+        XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_000_010_000),.missing)
+    }
+    func testRegularKeyboardAndSyntheticInputsStayNative(){
+        var c=InputCorrelation();c.record(.init(usage:30,down:true,timestamp:1_000_000_000,naga:false,device:2))
+        XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_000_000_000),.otherKeyboard)
+        XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_050_000_000),.missing)
+    }
+    func testStaleMousePressCannotRemapLaterTyping(){
+        var c=InputCorrelation();c.record(.init(usage:30,down:true,timestamp:1_000_000_000,naga:true,device:1))
+        XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_100_000_000),.missing)
+        XCTAssertEqual(c.consume(keyCode:19,down:true,timestamp:1_000_000_000),.missing)
+        XCTAssertEqual(c.consume(keyCode:18,down:false,timestamp:1_000_000_000),.missing)
+    }
+    func testAmbiguousSimultaneousKeysAreNotIntercepted(){
+        var c=InputCorrelation()
+        c.record(.init(usage:30,down:true,timestamp:1_000_000_000,naga:true,device:1))
+        c.record(.init(usage:30,down:true,timestamp:1_000_020_000,naga:false,device:2))
+        XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_000_010_000),.ambiguous)
+        XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_000_010_000),.missing)
+    }
+    func testReleaseAndKeyboardRepeatGuard(){
+        var c=InputCorrelation()
+        c.record(.init(usage:30,down:true,timestamp:1_000_000_000,naga:true,device:1))
+        XCTAssertTrue(c.nagaHeld(keyCode:18));XCTAssertFalse(c.otherHeld(keyCode:18))
+        c.record(.init(usage:30,down:true,timestamp:1_010_000_000,naga:false,device:2))
+        XCTAssertTrue(c.otherHeld(keyCode:18))
+        c.record(.init(usage:30,down:false,timestamp:1_020_000_000,naga:true,device:1))
+        XCTAssertFalse(c.nagaHeld(keyCode:18));XCTAssertTrue(c.otherHeld(keyCode:18))
+        XCTAssertEqual(c.consume(keyCode:18,down:false,timestamp:1_020_000_000),.naga(30))
+        c.reset();XCTAssertFalse(c.otherHeld(keyCode:18))
+    }
+    func testDuplicateNagaInterfacesDoNotLookLikeAnotherKeyboard(){
+        var c=InputCorrelation()
+        for d:UInt64 in [1,2]{c.record(.init(usage:30,down:true,timestamp:1_000_000_000,naga:true,device:d))}
+        XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_000_000_000),.naga(30))
+    }
+}
+
+final class DelayedEvidenceTests:XCTestCase {
+    func testLaterKeyboardEvidenceInvalidatesAnEarlyMouseMatch(){
+        var c=InputCorrelation()
+        c.record(.init(usage:30,down:true,timestamp:1_000_000_000,naga:true,device:1))
+        XCTAssertEqual(c.peek(keyCode:18,down:true,timestamp:1_000_000_000),.naga(30))
+        c.record(.init(usage:30,down:true,timestamp:1_000_100_000,naga:false,device:2))
+        XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_000_000_000),.ambiguous)
+    }
+}

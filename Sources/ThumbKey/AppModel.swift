@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 import ThumbKeyCore
 
 final class AppModel: ObservableObject {
-    @Published var configuration = Configuration() { didSet { save() } }
+    @Published var configuration = Configuration() { didSet { save(); updateRouting() } }
     @Published var selectedProfile = UUID()
     @Published var selectedButton = 1
     @Published var learning: Int?
@@ -37,11 +37,12 @@ final class AppModel: ObservableObject {
         selectedProfile=configuration.profiles[0].id
         loaded=saveError.isEmpty
         capture.onDevices={ [weak self] devices in self?.updateDevices(devices) }
-        capture.onKeys={ [weak self] downs,ups in self?.received(downs:downs,ups:ups) }
-        capture.onDisconnect={ [weak self] in self?.runner.cancelAll();self?.message="Naga disconnected. Held keys released." }
+        capture.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted) }
+        capture.onDisconnect={ [weak self] in self?.pause();self?.message="Input device disconnected or filter stopped. Mappings paused; held keys released." }
         capture.onError={ [weak self] text in self?.message=text }
         runner.status={ [weak self] text in self?.message=text }
-        updateDevices(capture.deviceList); refreshPermissions()
+        updateDevices(capture.deviceList); refreshPermissions();updateRouting()
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didActivateApplicationNotification,object:nil,queue:.main){[weak self] _ in self?.updateRouting()})
         permissionTimer=Timer.scheduledTimer(withTimeInterval:2,repeats:true){[weak self] _ in self?.refreshPermissions()}
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main){[weak self] _ in self?.pause();self?.message="Paused for sleep. Enable mappings when you return."})
         observers.append(NotificationCenter.default.addObserver(forName:NSApplication.willTerminateNotification,object:nil,queue:.main){[weak self] _ in self?.pause()})
@@ -74,21 +75,22 @@ final class AppModel: ObservableObject {
         guard inputAllowed && accessibilityAllowed else {message="Grant both permissions first, then enable mappings.";return}
         guard interfaceCount>0 else {message="Connect your Naga using its cable or receiver, then retry.";return}
         guard saveError.isEmpty else {message="Resolve the configuration error before enabling mappings.";return}
-        message="";capture.start()
-        guard capture.capturedCount==interfaceCount else {capture.stop();runner.cancelAll();enabled=false;return}
-        enabled=true
+        message="";updateRouting();let started=capture.start()
+        guard started && capture.capturedCount==interfaceCount else {capture.stop();runner.cancelAll();enabled=false;return}
+        enabled=true;message="Ready. Press a side button to check its mapping."
     }
-    func pause(){enabled=false;cancelLearning();capture.stop();runner.cancelAll()}
+    func pause(){enabled=false;cancelLearning();capture.stop();runner.cancelAll();message=""}
     func learn(){
         if !enabled {start()};guard enabled else{return}
-        runner.cancelAll();learning=selectedButton;message="Press physical side button \(selectedButton). Other mappings are paused while learning."
+        runner.cancelAll();learning=selectedButton;updateRouting();message="Press physical side button \(selectedButton). Other mappings are paused while learning."
         learnedTimeout?.cancel();let work=DispatchWorkItem{[weak self] in self?.cancelLearning();self?.message="Button learning timed out. Try again when ready."};learnedTimeout=work
         DispatchQueue.main.asyncAfter(deadline:.now()+15,execute:work)
     }
-    func cancelLearning(){learning=nil;learnedTimeout?.cancel();learnedTimeout=nil}
-    private func received(downs:Set<UInt32>,ups:Set<UInt32>) {
+    func cancelLearning(){learning=nil;learnedTimeout?.cancel();learnedTimeout=nil;updateRouting()}
+    private func updateRouting(){capture.setBindings(configuration.profile(for:NSWorkspace.shared.frontmostApplication?.bundleIdentifier).buttons,learning:learning != nil)}
+    private func received(usage:UInt32,down:Bool,binding:ButtonBinding?,intercepted:Bool) {
+        if !down {runner.up(usage);if intercepted,let binding{message="Button \(binding.id) released."};return}
         if let target=learning {
-            guard let usage=downs.filter({$0>=4 && $0<224}).sorted().first else{return}
             runner.cancelAll()
             // Input identity belongs to the physical pad and is shared by all app profiles.
             for p in configuration.profiles.indices {
@@ -98,13 +100,8 @@ final class AppModel: ObservableObject {
             }
             cancelLearning();lastButton=target;message="Button \(target) learned. Its original input is HID \(usage).";return
         }
-        let active=configuration.profile(for:NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
-        for usage in ups.sorted(by:{($0<224 ? 0:1,$0)<($1<224 ? 0:1,$1)}){runner.up(usage)}
-        for usage in downs.sorted(by:{($0>=224 ? 0:1,$0)<($1>=224 ? 0:1,$1)}) {
-            let b=active.buttons.first{$0.usage==usage}
-            if let b {lastButton=b.id}
-            runner.down(usage,binding:b)
-        }
+        if let binding{lastButton=binding.id;message="Button \(binding.id) · \(binding.mode.label)"}
+        if intercepted{runner.down(usage,binding:binding)}
     }
     func recordChanged(_ recording:Bool){runner.cancelAll();runner.suspend=recording}
     func dictationPreset(){editButton{$0.name="Dictation";$0.mode = .hold;$0.chord=Chord(keyCode:49,modifiers:[.control,.option],keyLabel:"Space")}}
