@@ -1,0 +1,9 @@
+.build/
+.swift-cache/
+.DS_Store
+*.app/
+.swiftpm/
+.env*
+*.p12
+*.p8
+*.mobileprovision
