@@ -48,7 +48,7 @@ public struct ButtonBinding: Codable, Identifiable, Equatable {
     public var steps: [MacroStep] = []
     public init(id: Int, usage: UInt32?) { self.id=id; self.usage=usage }
     public var title: String { name.isEmpty ? MouseControls.title(id) : name }
-    public var detail: String { switch mode { case .passthrough: return MouseControls.extraIDs.contains(id) ? "Not assigned":"Default action"; case .disabled: return "Disabled"; case .shortcut: return chord.label; case .hold: return "Hold " + chord.label; case .macro: return "\(steps.count) actions" } }
+    public var detail: String { switch mode { case .passthrough: return MouseControls.extraIDs.contains(id) ? "Not assigned":"Default action"; case .disabled: return "Disabled"; case .shortcut: return chord.label; case .hold: return "Hold " + chord.label; case .macro: return "\(steps.count) " + (steps.count==1 ? "action":"actions") } }
 }
 public struct Profile: Codable, Identifiable, Equatable {
     public var id = UUID()

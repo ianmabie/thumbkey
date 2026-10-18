@@ -133,9 +133,9 @@ struct ButtonEditor:View {
                 Button("Superwhispr · Hold Right Command"){model.rightCommandPreset()}
                 Button("LocalScribe · Hold Control–Option–Space"){model.dictationPreset()}
             } label:{Label("Fill in a dictation shortcut",systemImage:"waveform")}
-            if model.button.name=="Superwhispr" {
+            if model.button.mode == .hold && model.button.chord.keys == Chord.rightCommand.keys {
                 Text("This fills in Hold Right Command. Choose Right Command as the push-to-talk key in Superwhispr, and keep Superwhispr running.").font(.caption).foregroundStyle(.secondary)
-            } else if model.button.name=="Dictation" {
+            } else if model.button.mode == .hold && model.button.chord.keys == Chord(keyCode:49,modifiers:[.control,.option]).keys {
                 Text("This fills in Hold Control–Option–Space. LocalScribe must be running with the same dictation shortcut. This does not launch or configure LocalScribe.").font(.caption).foregroundStyle(.secondary)
             }
             if MouseControls.extraIDs.contains(model.selectedButton),model.button.mode == .passthrough {
