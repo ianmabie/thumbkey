@@ -11,9 +11,10 @@ struct NagaInterface: Identifiable {
     let device: IOHIDDevice
     let layout: KeyboardReportLayout
     let isNaga:Bool
+    let isMouse:Bool
 }
 
-/// Read HID reports without seizing a keyboard; filter only keyboard events with
+/// Read HID reports without seizing a device; filter keyboard/side-mouse events with
 /// matching, one-use Naga hardware evidence. Unmatched/ambiguous events stay native.
 final class HIDCapture {
     private let manager=IOHIDManagerCreate(kCFAllocatorDefault,IOHIDManagerOptions.independentDevices.rawValue)
@@ -26,6 +27,10 @@ final class HIDCapture {
     private var keyCodes=Set<UInt16>()
     private var learning=false
     private var active:[UInt16:Press]=[:]
+    private var vendorStates:[UInt64:Set<UInt32>]=[:]
+    private var activeVendor:[UInt32:Press]=[:]
+    private var extraButtons=false
+    private var activityAt=Date.distantPast
     private var tap:CFMachPort?
     private var tapContext:TapContext?
     private var tapLoop:CFRunLoop?
@@ -36,6 +41,8 @@ final class HIDCapture {
     var onHardwarePress:((UInt32)->Void)?
     var onError:((String)->Void)?
     var onDisconnect:((String)->Void)?
+    var onActivity:(()->Void)?
+    var onPlateSignal:((String)->Void)?
     private static let timebase:mach_timebase_info_data_t={var info=mach_timebase_info_data_t();mach_timebase_info(&info);return info}()
     init(){
         // Other keyboards provide transient collision evidence; their events never run actions.
@@ -53,23 +60,25 @@ final class HIDCapture {
     var deviceList:[NagaInterface]{interfaces.values.filter(\.isNaga).sorted{$0.id<$1.id}}
     var capturedCount:Int{endpoints.values.filter{$0.interface.isNaga}.count}
     var isRunning:Bool{condition.lock();defer{condition.unlock()};return running}
+    func setExtraButtonsEnabled(_ enabled:Bool){condition.lock();extraButtons=enabled;condition.unlock()}
     func setBindings(_ next:[ButtonBinding],learning:Bool){
         condition.lock();defer{condition.unlock()}
         bindings=Dictionary(uniqueKeysWithValues:next.compactMap{b in b.usage.map{($0,b)}})
         self.learning=learning
-        keyCodes=Set((learning ? Array(KeyboardMap.usageToKey.keys).filter{$0>=4 && $0<224}:Array(bindings.keys)).compactMap{KeyboardMap.usageToKey[$0]})
+        let sources=learning ? Array(KeyboardMap.usageToKey.keys).filter{$0>=4 && $0<224} + (4...32).map{InputSource.mouse(UInt32($0))}:Array(bindings.keys)
+        keyCodes=Set(sources.compactMap(InputSource.eventCode))
     }
     private func connected(_ d:IOHIDDevice){
-        guard Self.number(d,kIOHIDPrimaryUsagePageKey)==1,Self.number(d,kIOHIDPrimaryUsageKey)==6 else{return}
+        guard Self.number(d,kIOHIDPrimaryUsagePageKey)==1 else{return}
+        let primary=Self.number(d,kIOHIDPrimaryUsageKey)
+        guard primary==6 || primary==2 else{return}
         let name=Self.text(d,kIOHIDProductKey)
-        let pairs=(IOHIDDeviceGetProperty(d,kIOHIDDeviceUsagePairsKey as CFString) as? [[String:Any]]) ?? []
-        let mouse=pairs.contains{($0[kIOHIDDeviceUsagePageKey] as? Int)==1 && ($0[kIOHIDDeviceUsageKey] as? Int)==2}
-        guard !mouse,let data=IOHIDDeviceGetProperty(d,kIOHIDReportDescriptorKey as CFString) as? Data else{return}
-        let naga=DevicePolicy.accepts(vendor:Self.number(d,kIOHIDVendorIDKey),name:name,keyboard:true,mouse:false,builtIn:Self.number(d,"Built-In") != 0)
-        let layout=KeyboardReportLayout(descriptor:Array(data));guard layout.isSupported else{return}
+        guard let data=IOHIDDeviceGetProperty(d,kIOHIDReportDescriptorKey as CFString) as? Data else{return}
+        let naga=DevicePolicy.accepts(vendor:Self.number(d,kIOHIDVendorIDKey),name:name,keyboard:primary==6,mouse:primary==2,builtIn:Self.number(d,"Built-In") != 0)
+        let layout=KeyboardReportLayout(descriptor:Array(data),usagePage:primary==2 ? 9:7);guard layout.isSupported else{return}
         let id=Self.identifier(d)
         if interfaces[id] != nil{return}
-        interfaces[id]=NagaInterface(id:id,name:name,productID:Self.number(d,kIOHIDProductIDKey),transport:Self.text(d,kIOHIDTransportKey),device:d,layout:layout,isNaga:naga)
+        interfaces[id]=NagaInterface(id:id,name:name,productID:Self.number(d,kIOHIDProductIDKey),transport:Self.text(d,kIOHIDTransportKey),device:d,layout:layout,isNaga:naga,isMouse:primary==2)
         onDevices?(deviceList)
         if isRunning && !open(id){stop();onDisconnect?("Keyboard observation changed.")}
     }
@@ -84,7 +93,7 @@ final class HIDCapture {
         stop()
         for id in interfaces.keys.sorted(){if !open(id){stop();return false}}
         guard capturedCount>0 else{stop();onError?("No supported Naga side pad is connected.");return false}
-        let mask=(1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+        let mask=(1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.otherMouseUp.rawValue)
         let current=UUID()
         let context=TapContext(owner:self,generation:current)
         guard let port=CGEvent.tapCreate(tap:.cgSessionEventTap,place:.headInsertEventTap,options:.defaultTap,eventsOfInterest:CGEventMask(mask),callback:{_,type,event,context in
@@ -112,7 +121,7 @@ final class HIDCapture {
         return true
     }
     func stop(){
-        condition.lock();running=false;generation=UUID();correlation.reset();active=[:];let loop=tapLoop;tapLoop=nil;condition.broadcast();condition.unlock()
+        condition.lock();running=false;generation=UUID();correlation.reset();active=[:];vendorStates=[:];activeVendor=[:];let loop=tapLoop;tapLoop=nil;condition.broadcast();condition.unlock()
         if let tap{CGEvent.tapEnable(tap:tap,enable:false);CFMachPortInvalidate(tap);self.tap=nil};tapContext=nil
         if let loop{CFRunLoopPerformBlock(loop,CFRunLoopMode.commonModes.rawValue){CFRunLoopStop(loop)};CFRunLoopWakeUp(loop)}
         for endpoint in endpoints.values{IOHIDDeviceCancel(endpoint.device)}
@@ -130,9 +139,16 @@ final class HIDCapture {
         IOHIDDeviceRegisterInputReportWithTimeStampCallback(d,endpoint.buffer,512,{context,result,_,_,reportID,report,length,ticks in
             guard result==kIOReturnSuccess,let context,length>=0,length<=512 else{return}
             let endpoint=Unmanaged<Endpoint>.fromOpaque(context).takeUnretainedValue()
-            guard let keys=endpoint.interface.layout.decode(reportID:UInt8(truncatingIfNeeded:reportID),bytes:Array(UnsafeBufferPointer(start:report,count:length))) else{return}
-            let previous=endpoint.reports[reportID] ?? []
-            endpoint.reports[reportID]=keys
+            let bytes=Array(UnsafeBufferPointer(start:report,count:length)),reportID=UInt8(truncatingIfNeeded:reportID)
+            if endpoint.interface.isNaga {
+                endpoint.owner?.activity()
+                if [0x00e7,0x00e8].contains(endpoint.interface.productID),endpoint.interface.layout.hasRazerButtonReport,let buttons=NagaProtocol.buttons(reportID:reportID,bytes:bytes){endpoint.owner?.vendorReport(device:endpoint.interface.id,buttons:buttons);return}
+                if reportID==5 {endpoint.owner?.plateSignal(bytes)}
+            }
+            guard let decoded=endpoint.interface.layout.decode(reportID:reportID,bytes:bytes) else{return}
+            let keys=endpoint.interface.isMouse ? Set(decoded.filter{(4...32).contains($0)}.map(InputSource.mouse)):decoded
+            let previous=endpoint.reports[UInt32(reportID)] ?? []
+            endpoint.reports[UInt32(reportID)]=keys
             let stamp=UInt64(Double(ticks)*Double(HIDCapture.timebase.numer)/Double(HIDCapture.timebase.denom))
             endpoint.owner?.record(endpoint:endpoint,downs:keys.subtracting(previous),ups:previous.subtracting(keys),timestamp:stamp)
         },Unmanaged.passUnretained(endpoint).toOpaque())
@@ -143,11 +159,34 @@ final class HIDCapture {
     }
     private func record(endpoint:Endpoint,downs:Set<UInt32>,ups:Set<UInt32>,timestamp:UInt64){
         condition.lock();defer{condition.unlock()};guard running else{return}
-        for (keys,down) in [(downs,true),(ups,false)]{for usage in keys where usage>=4 && usage<224{
+        for (keys,down) in [(downs,true),(ups,false)]{for usage in keys where InputSource.eventCode(usage) != nil && !(224...231).contains(usage){
             correlation.record(.init(usage:usage,down:down,timestamp:timestamp,naga:endpoint.interface.isNaga,device:endpoint.interface.id))
             if endpoint.interface.isNaga && down{let current=generation;DispatchQueue.main.async{[weak self] in guard let self,self.isCurrent(current) else{return};self.onHardwarePress?(usage)}}
         }}
         condition.broadcast()
+    }
+    private func activity(){
+        let now=Date();guard now.timeIntervalSince(activityAt)>5 else{return};activityAt=now
+        DispatchQueue.main.async{[weak self] in self?.onActivity?()}
+    }
+    private func plateSignal(_ bytes:[UInt8]){
+        let signature=bytes.prefix(20).map{String(format:"%02x",$0)}.joined()
+        DispatchQueue.main.async{[weak self] in self?.onPlateSignal?(signature)}
+    }
+    private func vendorReport(device:UInt64,buttons:Set<UInt32>){
+        condition.lock();defer{condition.unlock()};guard running,extraButtons else{return}
+        let before=vendorStates.values.reduce(into:Set<UInt32>()){$0.formUnion($1)}
+        vendorStates[device]=buttons
+        let after=vendorStates.values.reduce(into:Set<UInt32>()){$0.formUnion($1)}
+        for usage in after.subtracting(before){
+            let binding=bindings[usage],intercepted=learning || (binding != nil && binding!.mode != .passthrough)
+            activeVendor[usage]=Press(usage:usage,binding:binding,intercepted:intercepted)
+            deliver(usage:usage,down:true,binding:binding,intercepted:intercepted)
+        }
+        for usage in before.subtracting(after){
+            let press=activeVendor.removeValue(forKey:usage)
+            deliver(usage:usage,down:false,binding:press?.binding,intercepted:press?.intercepted ?? false)
+        }
     }
     private func isCurrent(_ current:UUID)->Bool{condition.lock();defer{condition.unlock()};return running && generation==current}
     private func filter(type:CGEventType,event:CGEvent,generation current:UUID)->Unmanaged<CGEvent>?{
@@ -156,11 +195,14 @@ final class HIDCapture {
             DispatchQueue.main.async{[weak self] in guard let self,self.isCurrent(current) else{return};self.stop();self.onDisconnect?("macOS disabled the keyboard filter.")}
             return Unmanaged.passUnretained(event)
         }
-        guard type == .keyDown || type == .keyUp,event.getIntegerValueField(.eventSourceUserData) != 0x54484D424B4559 else{return Unmanaged.passUnretained(event)}
-        let code=UInt16(event.getIntegerValueField(.keyboardEventKeycode)),down=type == .keyDown
+        let mouse=type == .otherMouseDown || type == .otherMouseUp
+        guard mouse || type == .keyDown || type == .keyUp,event.getIntegerValueField(.eventSourceUserData) != 0x54484D424B4559 else{return Unmanaged.passUnretained(event)}
+        let button=event.getIntegerValueField(.mouseEventButtonNumber)
+        if mouse && !(3...31).contains(button){return Unmanaged.passUnretained(event)}
+        let code=mouse ? UInt16(0x100+button):UInt16(event.getIntegerValueField(.keyboardEventKeycode)),down=type == .keyDown || type == .otherMouseDown
         condition.lock();defer{condition.unlock()}
         guard running,keyCodes.contains(code) || active[code] != nil else{return Unmanaged.passUnretained(event)}
-        if down && event.getIntegerValueField(.keyboardEventAutorepeat) != 0{
+        if !mouse && down && event.getIntegerValueField(.keyboardEventAutorepeat) != 0{
             // Native repeats have no new HID transition. Only suppress an already-routed
             // Naga hold when no regular keyboard holds the same key.
             if let press=active[code],press.intercepted,correlation.nagaHeld(keyCode:code),!correlation.otherHeld(keyCode:code){return nil}

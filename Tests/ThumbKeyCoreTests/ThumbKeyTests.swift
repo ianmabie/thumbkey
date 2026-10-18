@@ -33,7 +33,7 @@ final class ThumbKeyTests:XCTestCase {
     let boot="05010906a101050719e029e715002501750195088102810119002aff00150026ff007508950681000508190129031500250175019503910295059101c0"
     let extended="05010906a1018501050719e029e71500250175019508810219002aff00150026ff007508950e8100c0050c0901a101850219002a3c021500263c029501751081007508950d8101c005010980a10185031981298315002501750195038102950581017508950e8101c005010900a10185040903150026ff00350046ff007508950f8100c005010900a10185050903150026ff00350046ff007508950f8100c0"
     func testFactoryTwelveInputsAreDistinct()throws{
-        let config=try Configuration().validated();let buttons=config.profiles[0].buttons
+        let config=try Configuration().validated();let buttons=config.profiles[0].buttons.filter{SidePlate.twelve.buttonIDs.contains($0.id)}
         XCTAssertEqual(buttons.compactMap(\.usage),Array(30...39)+[45,46])
         XCTAssertEqual(Set(buttons.compactMap(\.usage)).count,12)
     }
@@ -70,7 +70,8 @@ final class ThumbKeyTests:XCTestCase {
         XCTAssertTrue(DevicePolicy.accepts(vendor:0x1532,name:"Razer Naga V3 Pro",keyboard:true,mouse:false,builtIn:false))
         XCTAssertFalse(DevicePolicy.accepts(vendor:1452,name:"Magic Keyboard",keyboard:true,mouse:false,builtIn:false))
         XCTAssertFalse(DevicePolicy.accepts(vendor:0x1532,name:"Razer BlackWidow",keyboard:true,mouse:false,builtIn:false))
-        XCTAssertFalse(DevicePolicy.accepts(vendor:0x1532,name:"Razer Naga V3 Pro",keyboard:true,mouse:true,builtIn:false))
+        XCTAssertTrue(DevicePolicy.accepts(vendor:0x1532,name:"Razer Naga V3 Pro",keyboard:false,mouse:true,builtIn:false))
+        XCTAssertFalse(DevicePolicy.accepts(vendor:1452,name:"Magic Mouse",keyboard:false,mouse:true,builtIn:false))
     }
     func testProfileRoutingAndMacroRoundTrip()throws{
         var config=Configuration();var figma=Profile();figma.name="Figma";figma.bundleID="com.figma.Desktop"
@@ -138,5 +139,87 @@ final class DelayedEvidenceTests:XCTestCase {
         XCTAssertEqual(c.peek(keyCode:18,down:true,timestamp:1_000_000_000),.naga(30))
         c.record(.init(usage:30,down:true,timestamp:1_000_100_000,naga:false,device:2))
         XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_000_000_000),.ambiguous)
+    }
+}
+
+final class ExtraControlTests:XCTestCase {
+    private func decode(_ hex:String)->[UInt8]{stride(from:0,to:hex.count,by:2).map{i in let a=hex.index(hex.startIndex,offsetBy:i);return UInt8(hex[a..<hex.index(a,offsetBy:2)],radix:16)!}}
+    func testLegacyMigrationPreservesEveryProfileAndBinding()throws {
+        var legacy=Configuration();legacy.version=1
+        legacy.profiles[0].buttons=Array(legacy.profiles[0].buttons.prefix(12))
+        legacy.profiles[0].buttons[0].name="My dictation"
+        legacy.profiles[0].buttons[0].mode = .hold
+        legacy.profiles[0].buttons[0].chord=Chord(keyCode:49,modifiers:[.control,.option],keyLabel:"Space")
+        var app=legacy.profiles[0];app.id=UUID();app.bundleID="example.Editor";app.name="Editor"
+        app.buttons[1].mode = .disabled;legacy.profiles.append(app)
+        let migrated=try legacy.validated()
+        XCTAssertEqual(migrated.version,2)
+        for index in legacy.profiles.indices {
+            XCTAssertEqual(Array(migrated.profiles[index].buttons.prefix(12)),legacy.profiles[index].buttons)
+            XCTAssertEqual(migrated.profiles[index].id,legacy.profiles[index].id)
+            XCTAssertEqual(migrated.profiles[index].buttons.count,25)
+        }
+        XCTAssertEqual(try JSONDecoder().decode(Configuration.self,from:JSONEncoder().encode(migrated)).validated(),migrated)
+    }
+    func testPlateRoutingAndIdentificationKeepOtherBanksIntact()throws {
+        var config=Configuration();var app=Profile();app.name="Editor";app.bundleID="example.Editor";config.profiles.append(app)
+        config.profiles[0].buttons[0].name="Twelve only"
+        let original=config
+        config=try config.identifying(button:101,usage:31,plate:.six)
+        for index in config.profiles.indices {
+            let p=config.profiles[index]
+            XCTAssertEqual(p.buttons.first{$0.id==101}?.usage,31)
+            XCTAssertEqual(p.buttons.first{$0.id==102}?.usage,30)
+            XCTAssertEqual(p.buttons.filter{SidePlate.twelve.buttonIDs.contains($0.id)},original.profiles[index].buttons.filter{SidePlate.twelve.buttonIDs.contains($0.id)})
+            for plate in SidePlate.allCases {
+                let route=p.buttons(for:plate)
+                XCTAssertEqual(route.count,plate.rawValue+5)
+                XCTAssertEqual(Set(route.compactMap(\.usage)).count,route.compactMap(\.usage).count)
+            }
+        }
+        // An extra button may not steal an active plate's source; reject atomically.
+        XCTAssertThrowsError(try config.identifying(button:17,usage:30,plate:.six))
+        XCTAssertThrowsError(try config.identifying(button:1,usage:40,plate:.six))
+    }
+    func testDedicatedButtonReportDoesNotCollideWithKeyboardNumbers() {
+        let body:[UInt8]=[0x20,0x59]+Array(repeating:0,count:13)
+        XCTAssertEqual(NagaProtocol.buttons(reportID:4,bytes:body),[InputSource.vendor(0x20),InputSource.vendor(0x59)])
+        XCTAssertEqual(NagaProtocol.buttons(reportID:4,bytes:[4]+body),[InputSource.vendor(0x20),InputSource.vendor(0x59)])
+        XCTAssertEqual(NagaProtocol.buttons(reportID:4,bytes:Array(repeating:0,count:15)),[])
+        XCTAssertNil(NagaProtocol.buttons(reportID:5,bytes:body))
+        XCTAssertNil(NagaProtocol.buttons(reportID:4,bytes:[0x20]))
+        XCTAssertNotEqual(InputSource.vendor(0x20),UInt32(0x20))
+        XCTAssertNil(InputSource.eventCode(InputSource.vendor(0x20)))
+    }
+    func testModeProtocolChecksRepliesAndLimitsWrites() {
+        let query=NagaProtocol.modeRequest();XCTAssertEqual(query.count,90);XCTAssertEqual(query[7],0x84)
+        for mode:UInt8 in [0,3] {
+            var reply=NagaProtocol.modeRequest(set:mode);XCTAssertEqual(reply[7],4);XCTAssertEqual(reply[8],mode)
+            reply[0]=2
+            XCTAssertEqual(NagaProtocol.modeResponse(reply,command:4),mode)
+            XCTAssertNil(NagaProtocol.modeResponse(reply,command:0x84))
+            reply[8] ^= 1;XCTAssertNil(NagaProtocol.modeResponse(reply,command:4))
+        }
+        XCTAssertNil(NagaProtocol.modeResponse(Array(query.dropLast()),command:0x84))
+    }
+    func testActualMouseDescriptorSeparatesPrimaryClicksFromSideButtons() {
+        let hex="05010902a1010901a100050919012905150025017501950581027501950b8103050c0a38021581257f750895018106050109381581257f7508950181060930093116018026ff7f751095028106c0c0"
+        let layout=KeyboardReportLayout(descriptor:decode(hex),usagePage:9)
+        XCTAssertTrue(layout.isSupported)
+        XCTAssertEqual(layout.decode(reportID:0,bytes:[0x19,0,0,0,0,0,0,0]),[1,4,5])
+        var correlation=InputCorrelation()
+        correlation.record(.init(usage:InputSource.mouse(4),down:true,timestamp:1_000_000,naga:true,device:1))
+        XCTAssertEqual(correlation.consume(keyCode:0x103,down:true,timestamp:1_000_000),.naga(InputSource.mouse(4)))
+        XCTAssertFalse(InputSource.valid(InputSource.mouse(1)))
+        XCTAssertTrue(KeyboardReportLayout(descriptor:decode("05010906a1018501050719e029e71500250175019508810219002aff00150026ff007508950e8100c005010900a10185040903150026ff00350046ff007508950f8100c0")).hasRazerButtonReport)
+    }
+    func testRightCommandHasDistinctPressAndReleaseFlags() {
+        XCTAssertEqual(Chord.rightCommand.keys,[54]);XCTAssertEqual(Chord.rightCommand.label,"Right Command")
+        let right=ModifierKey.flags(physical:0,pressed:[54])
+        XCTAssertEqual(right,(1<<20)|16)
+        XCTAssertEqual(right&8,0)
+        XCTAssertEqual(ModifierKey.flags(physical:0,pressed:[]),0)
+        XCTAssertEqual(ModifierKey.flags(physical:(1<<17)|2,pressed:[54]),right|(1<<17)|2)
+        XCTAssertEqual(Chord(keyCode:55,modifiers:.command).keys,[55])
     }
 }

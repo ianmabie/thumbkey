@@ -8,6 +8,11 @@ final class AppModel: ObservableObject {
     @Published var configuration = Configuration() { didSet { save(); updateRouting() } }
     @Published var selectedProfile = UUID()
     @Published var selectedButton = 1
+    @Published private(set) var sidePlate=SidePlate(rawValue:UserDefaults.standard.integer(forKey:"sidePlate")) ?? .twelve
+    @Published private(set) var extraButtonsEnabled=UserDefaults.standard.bool(forKey:"extraButtonsEnabled")
+    @Published private(set) var extraButtonsActive=false
+    @Published private(set) var lastPlateSignal="No plate identity signal received"
+    private let driverMode=NagaDriverMode()
     @Published var learning: Int?
     @Published var lastButton: Int?
     @Published var enabled=false
@@ -33,19 +38,29 @@ final class AppModel: ObservableObject {
     var file: URL { directory.appendingPathComponent("bindings.json") }
     init() {
         do {
-            if FileManager.default.fileExists(atPath:file.path) { configuration=try JSONDecoder().decode(Configuration.self,from:Data(contentsOf:file)).validated() }
+            if FileManager.default.fileExists(atPath:file.path) {
+                let data=try Data(contentsOf:file)
+                let original=try JSONDecoder().decode(Configuration.self,from:data)
+                configuration=try original.validated()
+                if original.version != configuration.version {
+                    try data.write(to:directory.appendingPathComponent("bindings-before-v2-\(UUID().uuidString).json"),options:.atomic)
+                    try JSONEncoder().encode(configuration).write(to:file,options:.atomic)
+                }
+            }
             else {
                 configuration.profiles[0].buttons[0].name="Dictation"
                 configuration.profiles[0].buttons[0].mode = .hold
                 configuration.profiles[0].buttons[0].chord=Chord(keyCode:49,modifiers:[.control,.option],keyLabel:"Space")
             }
         } catch { saveError="Could not read saved mappings. They have not been overwritten: \(error.localizedDescription)" }
-        selectedProfile=configuration.profiles[0].id
+        selectedProfile=configuration.profiles[0].id;selectedButton=sidePlate.buttonIDs[0]
         loaded=saveError.isEmpty
         capture.onDevices={ [weak self] devices in self?.updateDevices(devices) }
         capture.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted) }
         capture.onDisconnect={ [weak self] reason in self?.interrupted(reason) }
         capture.onError={ [weak self] text in self?.message=text }
+        capture.onPlateSignal={ [weak self] signal in self?.lastPlateSignal=signal }
+        capture.onActivity={ [weak self] in self?.checkExtraButtonMode() }
         runner.status={ [weak self] text in self?.message=text }
         updateDevices(capture.deviceList); refreshPermissions();updateRouting()
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didActivateApplicationNotification,object:nil,queue:.main){[weak self] _ in self?.updateRouting()})
@@ -68,7 +83,30 @@ final class AppModel: ObservableObject {
         edit(&configuration.profiles[profileIndex].buttons[i])
     }
     func editStep(_ id:UUID,_ edit:(inout MacroStep)->Void) {editButton { b in if let i=b.steps.firstIndex(where:{$0.id==id}){edit(&b.steps[i])} } }
+    var sideButtons:[ButtonBinding] {profile.buttons.filter{sidePlate.buttonIDs.contains($0.id)}}
+    var extraButtons:[ButtonBinding] {profile.buttons.filter{MouseControls.extraIDs.contains($0.id)}}
     func select(_ id:Int){cancelLearning();selectedButton=id}
+    func selectPlate(_ plate:SidePlate){
+        runner.cancelAll();cancelLearning();sidePlate=plate
+        UserDefaults.standard.set(plate.rawValue,forKey:"sidePlate")
+        if !MouseControls.extraIDs.contains(selectedButton){selectedButton=plate.buttonIDs[0]}
+        updateRouting();message="Using the \(plate.label). Each plate keeps its own mappings."
+    }
+    func setExtraButtons(_ value:Bool){
+        let resume=wantsMappings
+        if let error=stopCapture(){recovery.pause();message="Mappings paused. \(error) Reconnect the mouse before enabling again.";return}
+        extraButtonsEnabled=value;UserDefaults.standard.set(value,forKey:"extraButtonsEnabled")
+        if resume{attemptStart()}
+    }
+    private func checkExtraButtonMode(){
+        guard enabled,extraButtonsActive else{return}
+        do{if try driverMode.ensure(){
+            runner.cancelAll()
+            guard capture.start() else{pause();message="Could not restart input observation after mouse idle.";return}
+            message="Extra-button reporting restored after mouse idle."
+        }}
+        catch{pause();message="Extra-button connection lost: \(error.localizedDescription)"}
+    }
     private func updateDevices(_ devices:[NagaInterface]) {
         interfaceCount=devices.count
         if let first=devices.first {deviceName="\(first.name) · \(first.transport)"} else {deviceName="No Naga connected"}
@@ -95,10 +133,22 @@ final class AppModel: ObservableObject {
         guard saveError.isEmpty else {pause();message="Resolve the configuration error before enabling mappings.";return}
         message="";updateRouting();let started=capture.start()
         guard started && capture.capturedCount==interfaceCount else {capture.stop();runner.cancelAll();enabled=false;scheduleRecovery();return}
-        enabled=true;recovery.resetAttempts();message="Ready. Press a side button to check its mapping."
+        if extraButtonsEnabled {
+            do {try driverMode.activate();extraButtonsActive=true;capture.setExtraButtonsEnabled(true)}
+            catch {pause();message="Could not enable extra buttons: \(error.localizedDescription)";return}
+        }
+        enabled=true;recovery.resetAttempts();message="Ready. Press a mouse button to check its mapping."
     }
-    private func stopCapture(){recoveryWork?.cancel();recoveryWork=nil;enabled=false;cancelLearning();capture.stop();runner.cancelAll()}
-    func pause(){recovery.pause();stopCapture();message="Mappings paused. Side buttons send their original keys."}
+    @discardableResult private func stopCapture()->String?{
+        recoveryWork?.cancel();recoveryWork=nil;enabled=false;cancelLearning();capture.stop();runner.cancelAll()
+        capture.setExtraButtonsEnabled(false);extraButtonsActive=false
+        do{try driverMode.restore();return nil}catch{return error.localizedDescription}
+    }
+    func pause(){
+        recovery.pause()
+        if let error=stopCapture(){message="Mappings paused. \(error) Reconnect the mouse to restore normal behavior."}
+        else{message="Mappings paused. Side buttons send their original keys."}
+    }
     func shutdown(){stopCapture()}
     private func interrupted(_ reason:String){
         stopCapture();message="\(reason) Held keys released. Reconnecting…";scheduleRecovery()
@@ -114,28 +164,27 @@ final class AppModel: ObservableObject {
     }
     func learn(){
         if !enabled {start()};guard enabled else{return}
-        runner.cancelAll();learning=selectedButton;updateRouting();message="Press physical side button \(selectedButton). Other mappings are paused while learning."
+        runner.cancelAll();learning=selectedButton;updateRouting();message="Press \(MouseControls.title(selectedButton)). Other mappings are paused while identifying it."
         learnedTimeout?.cancel();let work=DispatchWorkItem{[weak self] in self?.cancelLearning();self?.message="Button learning timed out. Try again when ready."};learnedTimeout=work
         DispatchQueue.main.asyncAfter(deadline:.now()+15,execute:work)
     }
     func cancelLearning(){learning=nil;learnedTimeout?.cancel();learnedTimeout=nil;updateRouting()}
-    private func updateRouting(){capture.setBindings(configuration.profile(for:NSWorkspace.shared.frontmostApplication?.bundleIdentifier).buttons,learning:learning != nil)}
+    private func updateRouting(){capture.setBindings(configuration.profile(for:NSWorkspace.shared.frontmostApplication?.bundleIdentifier).buttons(for:sidePlate),learning:learning != nil)}
     private func received(usage:UInt32,down:Bool,binding:ButtonBinding?,intercepted:Bool) {
-        if !down {runner.up(usage);if intercepted,let binding{message="Button \(binding.id) released."};return}
+        if !down {runner.up(usage);if intercepted,let binding{message="\(MouseControls.title(binding.id)) released."};return}
         if let target=learning {
             runner.cancelAll()
-            // Input identity belongs to the physical pad and is shared by all app profiles.
-            for p in configuration.profiles.indices {
-                let old=configuration.profiles[p].buttons.first{$0.id==target}?.usage
-                if let other=configuration.profiles[p].buttons.firstIndex(where:{$0.usage==usage && $0.id != target}){configuration.profiles[p].buttons[other].usage=old}
-                if let index=configuration.profiles[p].buttons.firstIndex(where:{$0.id==target}){configuration.profiles[p].buttons[index].usage=usage}
-            }
-            cancelLearning();lastButton=target;message="Button \(target) learned. Its original input is HID \(usage).";return
+            do {
+                configuration=try configuration.identifying(button:target,usage:usage,plate:sidePlate)
+                cancelLearning();lastButton=target;message="Identified \(MouseControls.title(target)). Saved for all app profiles."
+            } catch {cancelLearning();message="Could not identify this button: \(error.localizedDescription)"}
+            return
         }
-        if let binding{lastButton=binding.id;message="Button \(binding.id) · \(binding.mode.label)"}
+        if let binding{lastButton=binding.id;message="\(MouseControls.title(binding.id)) · \(binding.mode.label)"}
         if intercepted{runner.down(usage,binding:binding)}
     }
     func recordChanged(_ recording:Bool){runner.cancelAll();runner.suspend=recording}
+    func rightCommandPreset(){editButton{$0.name="Superwhispr";$0.mode = .hold;$0.chord = .rightCommand}}
     func dictationPreset(){editButton{$0.name="Dictation";$0.mode = .hold;$0.chord=Chord(keyCode:49,modifiers:[.control,.option],keyLabel:"Space")}}
     func addProfile(_ app:NSRunningApplication){
         guard let bundle=app.bundleIdentifier,!configuration.profiles.contains(where:{$0.bundleID==bundle}) else{return}

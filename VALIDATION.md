@@ -1,5 +1,16 @@
 # Prototype status
 
+Extra controls and plate layouts, version 0.2.0 (October 18, 2026):
+
+- Added five named top/ring-finger slots, a Right Command hold preset, distinct left/right modifier recording, explanatory action labels, and an input-identification section with collapsed technical details.
+- Added separate saved mappings and routing for 12-/6-/2-button plates. Version 1 configurations migrate with their 12 existing bindings and app profiles preserved; the app backs up the original file before writing version 2. Switching the plate selector releases held keys. Plate identity is not inferred from shared number-key inputs.
+- All 23 core tests pass, including migration, per-plate routing and atomic identification, the actual mouse descriptor, dedicated report 4 parsing, reporting-mode reply validation, and distinct Right Command press/release flags, plus the existing recovery/correlation tests.
+- The signed candidate discovers three supported interfaces on the connected USB Naga V3 Pro (`1532:00e7`): one mouse and two keyboard interfaces. Primary click buttons are excluded from remapping.
+- Ran the candidate's reversible `--check-extra-mode` diagnostic on the connected mouse: it confirmed temporary mode `03 00` and verified restoration of the original mode. This validates feature-report control, not physical button delivery.
+- Native window checks and replacement of the running app are pending because the computer-control tool reports that the Mac is locked. The signed candidate is prepared separately; the currently installed app has not been replaced.
+- Still pending: each extra control's physical code/press/release, the front behind-wheel button's identification, Superwhispr accepting synthetic Right Command, side-pad behavior while driver mode is active, physical alternate plates, receiver/Bluetooth behavior, reconnect/idle restoration, and UI checks of the new editor.
+- Automatic plate switching remains unimplemented: no reliable plate identity report has been established. The interface explicitly requires selecting the attached plate after a swap. Physical swap observations are needed before adding automatic detection.
+
 Recovery fix, version 0.1.2:
 
 - Reproduced the reported state: button 1 was correctly assigned to hold Control–Option–Space, but the running app showed Mappings paused after a device/filter interruption. Re-enabling restored Mappings on.

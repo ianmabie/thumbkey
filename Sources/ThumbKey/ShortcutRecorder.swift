@@ -11,13 +11,14 @@ struct ShortcutRecorder:NSViewRepresentable {
     func updateNSView(_ v:Recorder,context:Context){v.chord=chord;v.changed={chord=$0};v.recordingChanged=onRecording;v.needsDisplay=true;v.setAccessibilityLabel("Shortcut: \(chord.label). Click to record.")}
     final class Recorder:NSView {
         var chord=Chord(),recording=false,seenModifiers=Modifiers()
+        var seenModifierKeys=Set<UInt16>()
         var changed:((Chord)->Void)?,recordingChanged:((Bool)->Void)?
         override var acceptsFirstResponder:Bool{true}
-        override func mouseDown(with event:NSEvent){window?.makeFirstResponder(self);recording=true;seenModifiers=[];recordingChanged?(true);needsDisplay=true}
+        override func mouseDown(with event:NSEvent){window?.makeFirstResponder(self);recording=true;seenModifiers=[];seenModifierKeys=[];recordingChanged?(true);needsDisplay=true}
         override func resignFirstResponder()->Bool{finish(nil);return super.resignFirstResponder()}
         override func draw(_ rect:NSRect){
             (recording ? NSColor.controlAccentColor.withAlphaComponent(0.1) : NSColor.controlBackgroundColor).setFill();NSBezierPath(roundedRect:bounds,xRadius:8,yRadius:8).fill()
-            let text=recording ? "Press shortcut… Esc cancels" : chord.label + "  ·  click to record"
+            let text=recording ? "Press your keys, then release · Esc cancels" : chord.label + "  ·  click to change"
             text.draw(at:NSPoint(x:12,y:10),withAttributes:[.font:NSFont.systemFont(ofSize:13,weight:.medium),.foregroundColor:NSColor.labelColor])
         }
         func flags(_ event:NSEvent)->Modifiers{
@@ -26,7 +27,13 @@ struct ShortcutRecorder:NSViewRepresentable {
         }
         override func flagsChanged(with event:NSEvent){
             guard recording else{return};let current=flags(event)
-            if !current.isEmpty{seenModifiers=current}else if !seenModifiers.isEmpty{finish(Chord(modifiers:seenModifiers))}
+            if !current.isEmpty {
+                seenModifiers.formUnion(current)
+                if ModifierKey.names[event.keyCode] != nil {seenModifierKeys.insert(event.keyCode)}
+            }else if !seenModifiers.isEmpty{
+                if seenModifierKeys.count==1,let code=seenModifierKeys.first {finish(Chord(keyCode:code,keyLabel:ModifierKey.names[code] ?? "Modifier"))}
+                else{finish(Chord(modifiers:seenModifiers))}
+            }
         }
         override func performKeyEquivalent(with event:NSEvent)->Bool{if recording{keyDown(with:event);return true};return super.performKeyEquivalent(with:event)}
         override func keyDown(with event:NSEvent){

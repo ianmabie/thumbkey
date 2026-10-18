@@ -10,7 +10,10 @@ public struct KeyboardReportLayout {
     private var fields: [KeyboardField] = []
     private var sizes: [UInt8:Int] = [:]
     public private(set) var numbered = false
-    public init(descriptor: [UInt8]) {
+    private var usagePage:UInt32=7
+    public private(set) var hasRazerButtonReport=false
+    public init(descriptor: [UInt8],usagePage:UInt32=7) {
+        self.usagePage=usagePage
         struct Globals { var page:UInt32=0; var size=0; var count=0; var report:UInt8=0 }
         var g=Globals(), stack:[Globals]=[], usages:[UInt32]=[], minimum:UInt32=0
         var offsets:[UInt8:Int]=[:], i=0
@@ -28,7 +31,8 @@ public struct KeyboardReportLayout {
             } else if type == 0 {
                 if tag == 8, g.size > 0, g.size <= 32, g.count > 0, g.count <= 4096 {
                     let offset=offsets[g.report,default:0]
-                    if value&1 == 0 && g.page==7 { fields.append(KeyboardField(report:g.report,offset:offset,width:g.size,count:g.count,variable:value&2 != 0,usages:usages,minimum:minimum)) }
+                    if value&1 == 0 && g.page==usagePage { fields.append(KeyboardField(report:g.report,offset:offset,width:g.size,count:g.count,variable:value&2 != 0,usages:usages,minimum:minimum)) }
+                    if value&1 == 0 && g.page==1 && usages==[3] && g.report==4 && g.size==8 && g.count==15 {hasRazerButtonReport=true}
                     offsets[g.report]=offset + g.size*g.count
                 }
                 usages=[]; minimum=0
@@ -51,7 +55,7 @@ public struct KeyboardReportLayout {
                 var value:UInt32=0
                 for b in 0..<f.width { if body[(start+b)/8] & (1 << ((start+b)%8)) != 0 { value |= 1 << b } }
                 if f.variable { if value != 0 { keys.insert(n < f.usages.count ? f.usages[n] : f.minimum + UInt32(n)) } }
-                else { if (1...3).contains(value) { return nil }; if value != 0 { keys.insert(value) } }
+                else { if usagePage==7 && (1...3).contains(value) { return nil }; if value != 0 { keys.insert(value) } }
             }
         }
         return keys
@@ -59,6 +63,6 @@ public struct KeyboardReportLayout {
 }
 public enum DevicePolicy {
     public static func accepts(vendor: Int, name: String, keyboard: Bool, mouse: Bool, builtIn: Bool) -> Bool {
-        vendor == 0x1532 && name.lowercased().contains("naga") && keyboard && !mouse && !builtIn
+        vendor == 0x1532 && name.lowercased().contains("naga") && (keyboard || mouse) && !builtIn
     }
 }

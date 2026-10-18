@@ -15,12 +15,20 @@ public struct Chord: Codable, Equatable, Hashable {
     public var modifiers: Modifiers
     public var keyLabel: String
     public init(keyCode: UInt16? = nil, modifiers: Modifiers = [], keyLabel: String = "") { self.keyCode=keyCode; self.modifiers=modifiers; self.keyLabel=keyLabel }
-    public var keys: [UInt16] { modifiers.keyCodes + (keyCode.map { [$0] } ?? []) }
+    public static let rightCommand=Chord(keyCode:54,keyLabel:"Right Command")
+    public var keys: [UInt16] {var seen=Set<UInt16>();return (modifiers.keyCodes + (keyCode.map { [$0] } ?? [])).filter{seen.insert($0).inserted}}
     public var isEmpty: Bool { keys.isEmpty }
-    public var label: String { isEmpty ? "Choose shortcut" : modifiers.symbols + keyLabel }
+    public var label: String { isEmpty ? "Choose keys…" : modifiers.symbols + (keyCode.flatMap{ModifierKey.names[$0]} ?? keyLabel) }
 }
 public enum ActionMode: String, Codable, CaseIterable { case passthrough, shortcut, hold, macro, disabled
-    public var label: String { switch self { case .passthrough: return "Original key"; case .shortcut: return "Hotkey"; case .hold: return "Hold keys"; case .macro: return "Macro"; case .disabled: return "Do nothing" } }
+    public var label: String { switch self { case .passthrough: return "Keep default action"; case .shortcut: return "Press a shortcut once"; case .hold: return "Hold keys while pressed"; case .macro: return "Run a sequence of actions"; case .disabled: return "Disable this button" } }
+    public var explanation:String {switch self {
+    case .passthrough:return "ThumbKey leaves this input alone. The mouse or foreground app handles it."
+    case .shortcut:return "Press the mouse button once to send these keys once, like Copy or Paste."
+    case .hold:return "The chosen keys stay down for as long as you hold the mouse button. Release the button to release the keys. Use this for push-to-talk or a modifier such as Right Command."
+    case .macro:return "Run the steps below in order: shortcuts, text, and optional delays."
+    case .disabled:return "Ignore this button while ThumbKey mappings are enabled."
+    }}
 }
 public enum StepKind: String, Codable, CaseIterable { case shortcut, text, delay }
 public struct MacroStep: Codable, Identifiable, Equatable {
@@ -39,30 +47,41 @@ public struct ButtonBinding: Codable, Identifiable, Equatable {
     public var chord = Chord()
     public var steps: [MacroStep] = []
     public init(id: Int, usage: UInt32?) { self.id=id; self.usage=usage }
-    public var title: String { name.isEmpty ? "Button \(id)" : name }
-    public var detail: String { switch mode { case .passthrough: return "Original key"; case .disabled: return "Disabled"; case .shortcut: return chord.label; case .hold: return "Hold " + chord.label; case .macro: return "\(steps.count) macro steps" } }
+    public var title: String { name.isEmpty ? MouseControls.title(id) : name }
+    public var detail: String { switch mode { case .passthrough: return MouseControls.extraIDs.contains(id) ? "Not assigned":"Default action"; case .disabled: return "Disabled"; case .shortcut: return chord.label; case .hold: return "Hold " + chord.label; case .macro: return "\(steps.count) actions" } }
 }
 public struct Profile: Codable, Identifiable, Equatable {
     public var id = UUID()
     public var name = "Everywhere"
     public var bundleID: String = ""
-    public var buttons = (1...12).map { ButtonBinding(id:$0, usage: UInt32($0 < 10 ? $0+29 : $0 == 10 ? 39 : $0 == 11 ? 45 : 46)) }
+    public var buttons = MouseControls.defaults()
     public init() {}
+    public func buttons(for plate:SidePlate)->[ButtonBinding] {buttons.filter{plate.buttonIDs.contains($0.id) || MouseControls.extraIDs.contains($0.id)}}
 }
 public struct Configuration: Codable, Equatable {
-    public var version = 1
+    public var version = 2
     public var profiles = [Profile()]
     public init() {}
     public func profile(for bundleID: String?) -> Profile { profiles.first { !$0.bundleID.isEmpty && $0.bundleID == bundleID } ?? profiles[0] }
     public func validated() throws -> Self {
-        guard version == 1, !profiles.isEmpty, profiles.count <= 50, profiles[0].bundleID.isEmpty else { throw ConfigError.invalid }
+        if version==1 {
+            var migrated=self
+            for i in migrated.profiles.indices {
+                guard migrated.profiles[i].buttons.count==12,Set(migrated.profiles[i].buttons.map(\.id))==Set(1...12) else{throw ConfigError.invalid}
+                migrated.profiles[i].buttons += MouseControls.defaults().filter{$0.id>12}
+            }
+            migrated.version=2;return try migrated.validated()
+        }
+        guard version == 2, !profiles.isEmpty, profiles.count <= 50, profiles[0].bundleID.isEmpty else { throw ConfigError.invalid }
         guard Set(profiles.map(\.id)).count == profiles.count else { throw ConfigError.invalid }
         let scoped = profiles.dropFirst().map(\.bundleID)
         guard !scoped.contains(""), Set(scoped).count == scoped.count else { throw ConfigError.invalid }
         for profile in profiles {
-            guard profile.buttons.count == 12, Set(profile.buttons.map(\.id)) == Set(1...12), profile.name.count <= 100, profile.bundleID.count <= 255 else { throw ConfigError.invalid }
-            let usages = profile.buttons.compactMap(\.usage)
-            guard Set(usages).count == usages.count, usages.allSatisfy({ $0 >= 4 && $0 <= 255 && !((224...231).contains($0)) }) else { throw ConfigError.invalid }
+            guard profile.buttons.count == MouseControls.allIDs.count, Set(profile.buttons.map(\.id)) == Set(MouseControls.allIDs), profile.name.count <= 100, profile.bundleID.count <= 255 else { throw ConfigError.invalid }
+            for plate in SidePlate.allCases {
+                let usages=profile.buttons(for:plate).compactMap(\.usage)
+                guard Set(usages).count==usages.count,usages.allSatisfy(InputSource.valid) else{throw ConfigError.invalid}
+            }
             for b in profile.buttons {
                 guard b.steps.count <= 100, Set(b.steps.map(\.id)).count == b.steps.count, b.name.count <= 100, valid(b.chord) else { throw ConfigError.invalid }
                 for s in b.steps { guard valid(s.chord), s.text.utf16.count <= 4096, (0...60000).contains(s.milliseconds) else { throw ConfigError.invalid } }
@@ -70,6 +89,19 @@ public struct Configuration: Codable, Equatable {
             }
         }
         return self
+    }
+    /// Change physical identity atomically across profiles, keeping other plates intact.
+    public func identifying(button target:Int,usage:UInt32,plate:SidePlate) throws -> Self {
+        guard InputSource.valid(usage),plate.buttonIDs.contains(target) || MouseControls.extraIDs.contains(target) else{throw ConfigError.invalid}
+        var next=self
+        let group=MouseControls.extraIDs.contains(target) ? MouseControls.extraIDs:plate.buttonIDs
+        for p in next.profiles.indices {
+            guard let index=next.profiles[p].buttons.firstIndex(where:{$0.id==target}) else{throw ConfigError.invalid}
+            let old=next.profiles[p].buttons[index].usage
+            if let other=next.profiles[p].buttons.firstIndex(where:{group.contains($0.id) && $0.id != target && $0.usage==usage}){next.profiles[p].buttons[other].usage=old}
+            next.profiles[p].buttons[index].usage=usage
+        }
+        return try next.validated()
     }
     private func valid(_ c: Chord) -> Bool { (c.keyCode == nil || c.keyCode! <= 126) && c.modifiers.rawValue <= 15 && c.keyLabel.count <= 40 }
 }

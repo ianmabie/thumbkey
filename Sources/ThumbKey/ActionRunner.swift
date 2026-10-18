@@ -7,15 +7,14 @@ final class ActionRunner {
     private var tasks:[UInt32:Task<Void,Never>]=[:]
     private var lifetimes:[UInt32:UUID]=[:]
     private var watchdogs:[UInt32:DispatchWorkItem]=[:]
+    private var postedKeys=Set<UInt16>()
     var status: ((String)->Void)?
     var suspend=false
     private func post(_ code:UInt16,down:Bool) {
         guard let e=CGEvent(keyboardEventSource:nil,virtualKey:code,keyDown:down) else{return}
-        let mods:[UInt16:CGEventFlags]=[55:.maskCommand,54:.maskCommand,56:.maskShift,60:.maskShift,58:.maskAlternate,61:.maskAlternate,59:.maskControl,62:.maskControl]
-        var flags=CGEventSource.flagsState(.hidSystemState).intersection([.maskShift,.maskControl,.maskAlternate,.maskCommand,.maskAlphaShift,.maskSecondaryFn])
-        for key in ownership.heldKeys { if let f=mods[key]{flags.insert(f)} }
-        e.flags=flags
-        if mods[code] != nil { e.type = .flagsChanged }
+        if down{postedKeys.insert(code)}else{postedKeys.remove(code)}
+        e.flags=CGEventFlags(rawValue:ModifierKey.flags(physical:CGEventSource.flagsState(.hidSystemState).rawValue,pressed:postedKeys))
+        if ModifierKey.familyBits[code] != nil { e.type = .flagsChanged }
         e.setIntegerValueField(.eventSourceUserData,value:0x54484D424B4559)
         e.post(tap:.cgSessionEventTap)
     }
