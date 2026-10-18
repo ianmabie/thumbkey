@@ -6,7 +6,7 @@ A small, local macOS app for mapping Razer Naga and Logitech MX Master 3S button
 
 Build with `Scripts/build-app.sh`, then open `../ThumbKey.app`. Grant **Input Monitoring** (reads button input) and **Accessibility** (sends shortcuts). Enable mappings in the window. ThumbKey remembers whether mappings were enabled across relaunches, sleep, and reconnects. Pause releases held keys and restores normal mouse reporting.
 
-Select a mouse using its 3D card beside the title. Each card shows battery level, charging state when available, and Wired USB / 2.4 GHz wireless / Bluetooth from the active transport. Refresh updates both cards; unavailable readings are shown explicitly. Then select a button in the rotatable 3D illustration or the matching numbered list and choose an action. Naga users also select the attached **2-, 6-, or 12-button side plate**:
+Select a mouse using its 3D card beside the title. Each card shows battery level, charging state when available, and Wired USB / 2.4 GHz wireless / Bluetooth from the active transport. Refresh updates both cards; unavailable readings are shown explicitly. Then select a button in the rotatable 3D illustration or the matching numbered list and choose an action. Use **Bottom** to inspect the base, or drag to rotate freely upside down. The underside switches and sensors are visual details; the button list contains the controls ThumbKey can map. Naga users also select the attached **2-, 6-, or 12-button side plate**:
 
 | Action | Behavior |
 | --- | --- |

@@ -5,9 +5,9 @@ import simd
 import ThumbKeyCore
 
 enum MouseViewAngle:String,CaseIterable,Identifiable {
-    case overview,left,top,right
+    case overview,left,top,right,bottom
     var id:String{rawValue}
-    var title:String{switch self{case .overview:return "Overview";case .left:return "Thumb";case .top:return "Top";case .right:return "Right"}}
+    var title:String{switch self{case .overview:return "Overview";case .left:return "Thumb";case .top:return "Top";case .right:return "Right";case .bottom:return "Bottom"}}
 }
 
 /// Original meshes modeled from multi-angle manufacturer photos; dimensions/locations are approximate.
@@ -36,10 +36,13 @@ enum MouseIllustration {
         position(camera,angle:.overview,thumbnail:!hotspots);builder.root.addChildNode(camera)
         builder.scene.lightingEnvironment.contents=studioEnvironment
         builder.scene.lightingEnvironment.intensity=1.65
-        for (position,power) in [(SCNVector3(-90,180,-100),CGFloat(850)),(SCNVector3(100,100,70),CGFloat(260))] {
+        for (position,power) in [(SCNVector3(-90,180,-100),CGFloat(850)),(SCNVector3(100,100,70),CGFloat(260)),(SCNVector3(-65,-140,-70),CGFloat(550))] {
             let light=SCNNode();light.light=SCNLight();light.light?.type = .omni;light.light?.intensity=power;light.position=position;builder.root.addChildNode(light)
         }
         let ambient=SCNNode();ambient.light=SCNLight();ambient.light?.type = .ambient;ambient.light?.intensity=35;builder.root.addChildNode(ambient)
+        let undersideLight=SCNNode();undersideLight.light=SCNLight();undersideLight.light?.type = .directional
+        undersideLight.light?.intensity=650;undersideLight.eulerAngles=SCNVector3(Float.pi/2,0,0)
+        builder.root.addChildNode(undersideLight)
         return(builder.scene,camera,builder.buttons)
     }
     static func position(_ camera:SCNNode,angle:MouseViewAngle,thumbnail:Bool){
@@ -49,9 +52,11 @@ enum MouseIllustration {
         case .left:camera.position=SCNVector3(-220,65,-25)
         case .right:camera.position=SCNVector3(220,85,-30)
         case .top:camera.position=SCNVector3(-4,270,-0.1)
+        case .bottom:camera.position=SCNVector3(-4,-230,-0.1)
         }
-        if angle == .top{camera.look(at:target,up:SCNVector3(0,0,-1),localFront:SCNVector3(0,0,-1))}else{camera.look(at:target,up:SCNVector3(0,1,0),localFront:SCNVector3(0,0,-1))}
-        camera.camera?.orthographicScale=thumbnail ? 65:angle == .top ? 73:57
+        let vertical=angle == .top || angle == .bottom
+        if vertical{camera.look(at:target,up:SCNVector3(0,0,-1),localFront:SCNVector3(0,0,-1))}else{camera.look(at:target,up:SCNVector3(0,1,0),localFront:SCNVector3(0,0,-1))}
+        camera.camera?.orthographicScale=thumbnail ? 65:vertical ? 73:57
     }
     /// Original studio illumination, shared by the cards and the interactive model.
     /// Broad highlights reveal curvature without importing photographs or texture assets.
@@ -101,14 +106,17 @@ enum MouseIllustration {
                     try png.write(to:directory.appendingPathComponent("\(family.rawValue)-\(plate.rawValue)-\(angle.rawValue).png"))
                 }
                 if plate == .twelve {
-                    let name=family == .naga ? "front-right":"rear-thumb"
-                    camera.position=family == .naga ? SCNVector3(150,145,-170):SCNVector3(-150,95,165)
-                    camera.look(at:SCNVector3(-4,20,0),up:SCNVector3(0,1,0),localFront:SCNVector3(0,0,-1))
-                    camera.camera?.orthographicScale=57
-                    let renderer=SCNRenderer(device:MTLCreateSystemDefaultDevice(),options:nil);renderer.scene=scene;renderer.pointOfView=camera
-                    let image=renderer.snapshot(atTime:0,with:CGSize(width:1000,height:720),antialiasingMode:.multisampling4X)
-                    if let tiff=image.tiffRepresentation,let bitmap=NSBitmapImageRep(data:tiff),let png=bitmap.representation(using:.png,properties:[:]) {
-                        try png.write(to:directory.appendingPathComponent("\(family.rawValue)-\(plate.rawValue)-\(name).png"))
+                    var inspectionViews:[(String,SCNVector3)]=[("rear-thumb",SCNVector3(-150,95,165)),("bottom-oblique",SCNVector3(145,-135,150))]
+                    if family == .naga {inspectionViews.append(("front-right",SCNVector3(150,145,-170)))}
+                    for (name,position) in inspectionViews {
+                        camera.position=position
+                        camera.look(at:SCNVector3(-4,20,0),up:SCNVector3(0,1,0),localFront:SCNVector3(0,0,-1))
+                        camera.camera?.orthographicScale=57
+                        let renderer=SCNRenderer(device:MTLCreateSystemDefaultDevice(),options:nil);renderer.scene=scene;renderer.pointOfView=camera
+                        let image=renderer.snapshot(atTime:0,with:CGSize(width:1000,height:720),antialiasingMode:.multisampling4X)
+                        if let tiff=image.tiffRepresentation,let bitmap=NSBitmapImageRep(data:tiff),let png=bitmap.representation(using:.png,properties:[:]) {
+                            try png.write(to:directory.appendingPathComponent("\(family.rawValue)-\(plate.rawValue)-\(name).png"))
+                        }
                     }
                 }
                 let missing=expected.subtracting(visible).sorted()
@@ -216,9 +224,27 @@ private final class MouseMeshBuilder {
             result[axis]=(2*t*t*t-3*t*t+1)*b[axis]+(t*t*t-2*t*t+t)*span*slope(i,axis)
                 + (-2*t*t*t+3*t*t)*c[axis]+(t*t*t-t*t)*span*slope(i+1,axis)
         }
-        if z>20 {result.y=(family == .naga ? 33:32)*sqrt(max(0.0001,1-pow((z-20)/43,2)))}
+        if z>20 {
+            let t=max(0,min(1,(z-20)/43)),p:Float=2.2
+            // Match the crown's square-root approach to the rear pole so the
+            // final millimetres close as a smooth dome, not a pointed ridge.
+            result.y=(family == .naga ? 33:32)*sqrt(max(0.0000001,1-pow(t,p)))
+        }
+        let crownStart:Float=family == .naga ? 20:12
+        if z>=crownStart {
+            let t=max(0,min(1,(z-crownStart)/(63-crownStart)))
+            let radius:Float=family == .naga ? 29:37
+            // The rear ends halfway up the shell, with an elliptical rollover,
+            // rather than bringing the crown down to a sharp point at the floor.
+            result.z=14+radius*sqrt(max(0,1-t*t))
+        }
         return result
     }
+    func heelRoundness(_ z:Float)->Float {
+        let t=max(0,min(1,(z-44)/19))
+        return sqrt(max(0,1-t*t))
+    }
+    func shoulderHeight(_ z:Float)->Float {14-8*heelRoundness(z)}
     func width(_ z: Float, right: Bool) -> Float {
         let w=section(z).y
         if family == .naga && right { return w + 5.5*exp(-pow((z+13)/27,2)) }
@@ -226,26 +252,36 @@ private final class MouseMeshBuilder {
     }
     var crownExponent:Float {family == .naga ? 3.2:2.8}
     func top(_ x: Float, _ z: Float) -> Float {
-        let s=section(z), w=width(z,right:x>0), f=min(0.9999,abs(x)/max(0.5,w))
-        let h: Float = 6+(s.z-6)*pow(max(0,1-pow(f,crownExponent)),0.52)
-        if family == .mxMaster3s { return h - 4*x/max(1,w)*pow(max(0,1-f),0.28) }
+        let s=section(z), w=width(z,right:x>0), f=min(1,abs(x)/max(0.001,w))
+        let base=shoulderHeight(z),rounding=heelRoundness(z)
+        let h: Float = base+(s.z-base)*pow(max(0,1-pow(f,crownExponent)),0.52)
+        if family == .mxMaster3s { return h - 4*x/max(1,w)*pow(max(0,1-f),0.28)*rounding }
         // A soft depression lets the ring finger sit alongside right-click.
-        return h - (x>0 ? 3*exp(-pow((z+20)/25,2))*pow(f,2):0)
+        return h - (x>0 ? 3*exp(-pow((z+20)/25,2))*pow(f,2)*rounding:0)
     }
     func sideX(_ y: Float, _ z: Float, right: Bool = false) -> Float {
         let section=self.section(z), w=width(z,right:right), sign:Float=right ? 1:-1
+        let base=shoulderHeight(z),rounding=heelRoundness(z)
+        if y<base {
+            // Let the MX ledge meet the rolled underside as well as the upper
+            // shell; clamping to maximum width leaves a detached rear corner.
+            let floor:Float=14-12.2*rounding
+            let fraction=max(0,min(1,(y-floor)/max(0.0001,base-floor)))
+            let sine=pow(fraction,1/0.45)-1
+            return sign*w*pow(sqrt(max(0,1-sine*sine)),2/crownExponent)
+        }
         if family == .naga && !right {
-            let fraction=max(0,min(0.9999,(y-6)/max(0.1,section.z-6)))
+            let fraction=max(0,min(0.9999,(y-base)/max(0.0001,section.z-base)))
             return -w*pow(max(0,1-pow(fraction,1/0.52)),1/crownExponent)
         }
         var lo:Float=0,hi:Float=0.9999
-        let depression:Float=family == .naga && right ? 3*exp(-pow((z+20)/25,2)):0
+        let depression:Float=family == .naga && right ? 3*exp(-pow((z+20)/25,2))*rounding:0
         // Keep inverse evaluation precise enough for the finite-difference normals;
         // coarser rounding creates visible speckling on the side-wheel housing.
         for _ in 0..<18 {
             let f=(lo+hi)/2
-            var h:Float=6+(section.z-6)*pow(max(0,1-pow(f,crownExponent)),0.52)
-            if family == .mxMaster3s {h -= 4*sign*f*pow(max(0,1-f),0.28)}
+            var h:Float=base+(section.z-base)*pow(max(0,1-pow(f,crownExponent)),0.52)
+            if family == .mxMaster3s {h -= 4*sign*f*pow(max(0,1-f),0.28)*rounding}
             else if right {h -= depression*f*f}
             if h>y {lo=f}else{hi=f}
         }
@@ -293,15 +329,13 @@ private final class MouseMeshBuilder {
         return SCNGeometry(sources:[SCNGeometrySource(vertices:p.map{SCNVector3($0)}),SCNGeometrySource(normals:n.map{SCNVector3($0)})],elements:[SCNGeometryElement(indices:indices,primitiveType:.triangles)])
     }
     func undersideHeight(_ z:Float,_ sine:Float)->Float {
-        // Roll the MX heel back into the shell instead of ending the flat base
-        // in a narrow vertical fin at the last longitudinal section.
-        let t=family == .mxMaster3s ? max(0,min(1,(z-54)/9)):0
-        let floor:Float=1.8+4.2*t*t*(3-2*t)
-        return floor+(6-floor)*pow(max(0,1+sine),0.45)
+        let rounding=heelRoundness(z),floor:Float=14-12.2*rounding
+        return floor+(shoulderHeight(z)-floor)*pow(max(0,1+sine),0.45)
     }
     func shell() {
         let body=mesh(rows:220,columns:192) { u,v in
-            let z:Float = -63+126*u, a=v*2*Float.pi, c=cos(a), sn=sin(a)
+            // Cosine spacing keeps the tight rear rollover smooth in profile.
+            let z:Float = -63+63*(1-cos(u*Float.pi)), a=v*2*Float.pi, c=cos(a), sn=sin(a)
             let x=self.width(z,right:c>0)*(c<0 ? -1:1)*pow(abs(c),2/self.crownExponent)
             let y:Float = sn>=0 ? self.top(x,z):self.undersideHeight(z,sn)
             return SIMD3(x,y,z)
@@ -309,7 +343,7 @@ private final class MouseMeshBuilder {
         node(body,.zero,shellMat)
         // Close both end faces; the low nose sits beneath separately sculpted click paddles.
         for z: Float in [-63,63] {
-            var p=[SIMD3<Float>(0,6,z)], indices=[UInt32]()
+            var p=[SIMD3<Float>(0,shoulderHeight(z),z)], indices=[UInt32]()
             for i in 0...120 {
                 let a=Float(i)*2*Float.pi/120, c=cos(a), sn=sin(a)
                 let x=width(z,right:c>0)*(c<0 ? -1:1)*pow(abs(c),2/self.crownExponent)
@@ -324,7 +358,8 @@ private final class MouseMeshBuilder {
             if family == .mxMaster3s {continue}
             let points=(0...100).map { i -> SIMD3<Float> in
                 let z:Float = -61+122*Float(i)/100
-                return SIMD3(self.sideX(6.6,z,right:side>0)*1.003,6.6,z)
+                let y=self.shoulderHeight(z)+0.6
+                return SIMD3(self.sideX(y,z,right:side>0)*1.003,y,z)
             }
             tube(points,radius:0.35,material:seam)
         }
@@ -719,20 +754,91 @@ private final class MouseMeshBuilder {
         patch(capsule(9.5,3.2),lift:0.07,material:seam,map:front,outward:SIMD3(0,0,-1))
         patch(capsule(6.8,0.65),lift:0.10,material:Self.material(0.28,gloss:0.64),map:front,outward:SIMD3(0,0,-1))
     }
+    /// Project every base detail onto the rolled body rather than floating a
+    /// plane beneath it. Underside parts are descriptive, not remappable inputs.
+    func bottomPoint(_ p:SIMD2<Float>,_ lift:Float)->SIMD3<Float> {
+        let f=min(1,abs(p.x)/max(0.001,width(p.y,right:p.x>0)))
+        let cosine=pow(f,crownExponent/2),sine = -sqrt(max(0,1-cosine*cosine))
+        return SIMD3(p.x,undersideHeight(p.y,sine)-lift,p.y)
+    }
     func underside() {
-        for z:Float in [-44,40] {
-            let contour=roundedContour([SIMD2(-14,z-4.5),SIMD2(14,z-4.5),SIMD2(14,z+4.5),SIMD2(-14,z+4.5)],radius:0.22)
-            // Thin skates follow the underside instead of floating rectangular
-            // blocks that protrude past the heel in a rear three-quarter view.
-            patch(contour,lift:0.12,material:rubber,map:{p,lift in
-                let f=min(0.9999,abs(p.x)/self.width(p.y,right:p.x>0))
-                let cosine=pow(f,self.crownExponent/2)
-                let sine = -sqrt(max(0,1-cosine*cosine))
-                return SIMD3(p.x,self.undersideHeight(p.y,sine)-lift,p.y)
-            })
+        let project:(SIMD2<Float>,Float)->SIMD3<Float>={self.bottomPoint($0,$1)}
+        let down=SIMD3<Float>(0,-1,0)
+        let base=Self.material(0.12,gloss:0.28),foot=Self.material(family == .naga ? 0.73:0.32,gloss:0.40)
+        let lens=Self.material(0.035,gloss:0.55)
+        lens.metalness.contents=0.0;lens.roughness.contents=0.28
+        func oval(_ x:Float,_ z:Float,_ rx:Float,_ rz:Float)->[SIMD2<Float>] {
+            (0..<48).map { i in
+                let a=Float(i)*2*Float.pi/48
+                return SIMD2(x+rx*cos(a),z+rz*sin(a))
+            }
         }
-        let g=SCNCylinder(radius:3.7,height:0.5);g.radialSegmentCount=40
-        node(g,SIMD3(0,1.3,0),seam)
+        func rect(_ x:Float,_ z:Float,_ w:Float,_ h:Float)->[SIMD2<Float>] {
+            roundedContour([SIMD2(x-w/2,z-h/2),SIMD2(x+w/2,z-h/2),SIMD2(x+w/2,z+h/2),SIMD2(x-w/2,z+h/2)],radius:0.30)
+        }
+        func plate(_ contour:[SIMD2<Float>],_ lift:Float,_ mat:SCNMaterial) {
+            patch(contour,lift:lift,material:mat,map:project,outward:down)
+        }
+        func label(_ text:String,_ x:Float,_ z:Float,_ size:Float) {
+            let g=SCNText(string:text,extrusionDepth:0);g.font=NSFont.systemFont(ofSize:1,weight:.medium);g.flatness=0.04
+            let m=SCNMaterial();m.lightingModel = .constant;m.diffuse.contents=NSColor(calibratedWhite:0.44,alpha:1)
+            let n=node(g,bottomPoint(SIMD2(x,z),0.60),m),bounds=g.boundingBox
+            n.pivot=SCNMatrix4MakeTranslation((bounds.max.x+bounds.min.x)/2,(bounds.max.y+bounds.min.y)/2,0)
+            // Viewed from below, screen right is physical left; text up is noseward.
+            n.simdOrientation=simd_quatf(simd_float3x3(columns:(SIMD3(-1,0,0),SIMD3(0,0,-1),down)))
+            n.scale=SCNVector3(size,size,size)
+        }
+        if family == .naga {
+            // Molded base insert, broad front skate and a crescent around the puck.
+            plate(roundedContour([SIMD2(-22,-56),SIMD2(22,-56),SIMD2(29,-15),SIMD2(29,24),SIMD2(21,47),SIMD2(0,55),SIMD2(-23,45),SIMD2(-29,15),SIMD2(-27,-22)],radius:0.12),0.10,base)
+            plate(roundedContour([SIMD2(-20,-53),SIMD2(20,-53),SIMD2(23,-39),SIMD2(20,-29),SIMD2(-20,-29),SIMD2(-23,-39)],radius:0.22),0.32,foot)
+            let rearFoot=roundedContour([SIMD2(-24,25),SIMD2(-19,40),SIMD2(-10,49),SIMD2(0,52),SIMD2(10,49),SIMD2(19,40),SIMD2(24,25),SIMD2(17,27),SIMD2(12,37),SIMD2(0,42),SIMD2(-12,37),SIMD2(-17,27)],radius:0.16)
+            plate(rearFoot,0.34,foot)
+            plate(oval(0,25,16.8,16.8),0.22,seam)
+            plate(oval(0,25,15.7,15.7),0.30,Self.material(0.16,gloss:0.25))
+            // Two subtle opposing latch notches on the removable charging puck.
+            for x:Float in [-14,14] {plate(rect(x,25,1.2,5),0.35,seam)}
+            plate(oval(0,-3,7.0,7.0),0.35,foot)
+            plate(oval(0,-3,5.5,5.5),0.40,seam)
+            plate(rect(0,-3,4.5,5.4),0.46,lens)
+            // Ring-finger lock, wireless mode slider, and profile selector.
+            plate(rect(15,-21,7.2,3.8),0.27,seam)
+            plate(rect(13.5,-21,3.4,3.0),0.44,Self.material(0.24,gloss:0.35))
+            plate(rect(15,-5,4.8,11),0.27,seam)
+            plate(rect(15,-7.3,3.6,4.3),0.44,Self.material(0.24,gloss:0.35))
+            plate(oval(-14,-5,3.5,3.5),0.27,seam)
+            plate(oval(-14,-5,2.7,2.7),0.43,Self.material(0.23,gloss:0.32))
+            plate(oval(-14,-12,0.75,0.75),0.45,green)
+            label("NAGA V3 PRO",0,-23,2.2)
+            label("PROFILE",-14,1.7,1.45)
+        } else {
+            plate(rect(0,1,21,92),0.13,seam)
+            plate(rect(0,1,19.5,90),0.20,Self.material(0.105,gloss:0.20))
+            // Four low-friction pads: nose, heel, body flank and thumb ledge.
+            plate(roundedContour([SIMD2(-16,-52),SIMD2(16,-52),SIMD2(18,-45),SIMD2(14,-36),SIMD2(-14,-36),SIMD2(-18,-45)],radius:0.25),0.33,foot)
+            plate(roundedContour([SIMD2(-17,36),SIMD2(17,36),SIMD2(17,43),SIMD2(10,51),SIMD2(0,54),SIMD2(-10,51),SIMD2(-17,43)],radius:0.24),0.33,foot)
+            plate(roundedContour([SIMD2(25,-5),SIMD2(29,-3),SIMD2(28,23),SIMD2(23,36),SIMD2(20,34),SIMD2(24,19)],radius:0.18),0.31,foot)
+            // Map the fourth skate directly onto the thumb-rest underside.
+            let wingMap:(SIMD2<Float>,Float)->SIMD3<Float>={p,lift in
+                let u=(p.y+39)/96,outer=self.wing(u,1),taper=pow(max(0,sin(u*Float.pi)),1.45)
+                let inner=self.sideX(3,p.y)+1
+                return SIMD3(inner+(outer.x-inner)*p.x,6-4.3*taper-lift,p.y)
+            }
+            patch(roundedContour([SIMD2(0.66,-1),SIMD2(0.87,-1),SIMD2(0.87,33),SIMD2(0.66,33)],radius:0.18),lift:0.32,material:foot,map:wingMap,outward:down)
+            // Power slot, glass sensor and Easy-Switch button with three channels.
+            plate(rect(0,-24,4.7,10),0.28,Self.material(0.24,gloss:0.35))
+            plate(rect(0,-24,3.7,8.8),0.34,seam)
+            plate(rect(0,-26.2,2.6,3.0),0.42,green)
+            plate(rect(0,-22.7,3.2,4.7),0.48,Self.material(0.20,gloss:0.32))
+            plate(oval(0,-2,5,7.1),0.31,Self.material(0.24,gloss:0.45))
+            plate(oval(0,-2,3.8,5.8),0.36,seam)
+            plate(rect(0,-2,3.2,6),0.43,lens)
+            plate(oval(0,25,4.8,4.8),0.29,seam)
+            plate(oval(0,25,3.9,3.9),0.43,Self.material(0.24,gloss:0.32))
+            label("MX Master 3S",0,-32,2.0)
+            label("1   2   3",0,15,2.3)
+            label("Easy-Switch",0,32,1.5)
+        }
     }
     func contactShadow() {
         let bitmap=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:128,pixelsHigh:128,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:512,bitsPerPixel:32)!

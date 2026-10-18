@@ -85,12 +85,10 @@ struct MouseSceneView:NSViewRepresentable {
         let view=MouseSCNView()
         view.backgroundColor = .clear;view.antialiasingMode = .multisampling4X
         view.allowsCameraControl=interactive;view.autoenablesDefaultLighting=false
-        view.defaultCameraController.interactionMode = .orbitTurntable
+        view.defaultCameraController.interactionMode = .orbitArcball
         view.defaultCameraController.inertiaEnabled=true
         view.defaultCameraController.automaticTarget=false
         view.defaultCameraController.target=SCNVector3(-4,20,0)
-        view.defaultCameraController.minimumVerticalAngle=8
-        view.defaultCameraController.maximumVerticalAngle=85
         view.choose=onSelect
         updateNSView(view,context:context);return view
     }
@@ -103,6 +101,7 @@ struct MouseSceneView:NSViewRepresentable {
             context.coordinator.family=family;context.coordinator.plate=plate;context.coordinator.angle=nil
         }
         if context.coordinator.angle != angle {
+            view.defaultCameraController.stopInertia()
             if let camera=view.pointOfView {MouseIllustration.position(camera,angle:angle,thumbnail:!interactive)}
             context.coordinator.angle=angle
         }

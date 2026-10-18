@@ -1,5 +1,13 @@
 # Prototype status
 
+Rounded heels and underside inspection, version 0.3.0 build 17 (October 18, 2026):
+
+- Rounded both rear crowns and rolled the underside upward into the heel instead of tapering to a point at the floor. Consistent rear curvature and denser end sampling keep the closing mesh smooth. Closed the MX upper/lower boundary exactly.
+- Added surface-conforming underside details: Naga front/rear skates, sensor ring, cover puck, ring-finger lock, wireless slider and profile selector; MX four glide pads, sensor, power slider and Easy-Switch controls. Added underside lighting, a Bottom preset and unrestricted arcball rotation. Preset changes stop ongoing rotation.
+- Signed release build and strict signature verification pass. Twenty-five review renders cover all mouse/plate presets plus rear and oblique underside views. All 17/11/7 Naga and five MX mapped controls pass visible-hit validation. Final offline build/render timings are 3.42/2.74/2.73/1.20 seconds, including images and hit checks. Input capture, configuration and permission code are unchanged.
+- Build 17 is prepared but not installed yet: the Mac locked during native validation. The existing live app remains build 16; live Bottom/drag checks and replacement are pending unlock.
+- Bluetooth investigation: macOS Bluetooth was on with a keyboard connected, but the Naga did not appear in My Devices or Nearby Devices. ThumbKey's read-only device diagnostic saw only the Logitech USB receiver. Requested that the user put the Naga in Bluetooth pairing mode using the manufacturer instructions; connection is pending hardware pairing mode and Mac unlock. Existing extra-button driver mode requires USB or the receiver, so full extra-button mapping over Bluetooth is not claimed.
+
 Live model update and icon refresh, version 0.3.0 build 16 (October 18, 2026):
 
 - Includes the complete build 15 model polish. Renamed the bundled icon resource to `ThumbKeyMouse.icns` and explicitly loads it as the application icon at launch, avoiding reliance on the previously cached app image. The icon artwork is unchanged from the mouse design introduced in build 13.
