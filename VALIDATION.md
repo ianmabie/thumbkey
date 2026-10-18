@@ -1,11 +1,11 @@
 # Prototype status
 
-Surface and lighting refinement, version 0.3.0 build 11 (October 18, 2026):
+Surface and lighting refinement, version 0.3.0 build 12 (October 18, 2026):
 
 - Inspected both user-provided Polycam scans locally. Kept raw captures and desk textures out of the repository. Adjusted MX crown placement and thumb-rest termination using the scan and product references; retained the Naga's correct 12-/6-/2-button layouts.
 - Corrected uneven-section curve slopes, deformation normals, and seam paths that previously cut through curved surfaces. Replaced wheel rib cylinders with grooved lathe geometry; added physically based graphite/metal, generated studio light, contact shadows, and subtler selection. Enlarged the mapping view from 300 to 390 points.
 - Signed release build succeeds. Offline previews cover all four configurations from four preset angles; ray checks verify all 17/11/7 Naga and five MX controls remain visible/selectable from a preset. No input/configuration code changed.
-- Native installation and UI verification are pending while the Mac is locked. The existing running app has not been replaced. Candidate: `work/thumbkey/ThumbKey-studio-release-build11.app` in the parent workspace.
+- Installed build 11 with the stable signing identity and rollback retained. Native inspection confirmed the larger mapping view and preserved paused state, but exposed a green tint in the MX card while the main model rendered correctly. Build 12 replaces live card views with cached 3D snapshots explicitly rendered in original color; the main mapping view remains interactive. Build 12 is installed and signed. Final native card/plate checks are pending because the Mac locked again. The mappings file SHA-256 remains unchanged.
 
 Photo-referenced model refinement, version 0.3.0 build 10 (October 18, 2026):
 

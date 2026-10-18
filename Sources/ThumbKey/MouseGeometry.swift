@@ -13,6 +13,17 @@ enum MouseViewAngle:String,CaseIterable,Identifiable {
 /// Original meshes modeled from multi-angle manufacturer photos; dimensions/locations are approximate.
 /// Geometry is generated offline with no downloaded textures or third-party models.
 enum MouseIllustration {
+    private static var thumbnails=[String:NSImage]()
+    static func thumbnail(family:MouseFamily,plate:SidePlate)->NSImage {
+        let key="\(family.rawValue)-\(plate.rawValue)"
+        if let image=thumbnails[key]{return image}
+        let (scene,camera,_)=make(family:family,plate:plate,hotspots:false)
+        scene.background.contents=NSColor.clear
+        let renderer=SCNRenderer(device:MTLCreateSystemDefaultDevice(),options:nil)
+        renderer.scene=scene;renderer.pointOfView=camera
+        let image=renderer.snapshot(atTime:0,with:CGSize(width:228,height:234),antialiasingMode:.multisampling4X)
+        thumbnails[key]=image;return image
+    }
     static func make(family:MouseFamily,plate:SidePlate,hotspots:Bool)->(SCNScene,SCNNode,[Int:SCNNode]) {
         let builder=MouseMeshBuilder(family:family,hotspots:hotspots)
         builder.shell();builder.clicks();builder.wheels()

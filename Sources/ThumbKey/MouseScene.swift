@@ -22,7 +22,8 @@ struct MouseDeviceCard:View {
     var body:some View {
         Button{model.selectMouse(family)}label:{
             HStack(spacing:7){
-                MouseSceneView(family:family,plate:family == .naga ? model.sidePlate:.twelve,selected:nil,interactive:false,onSelect:{_ in}).frame(width:76,height:78).allowsHitTesting(false).accessibilityHidden(true)
+                Image(nsImage:MouseIllustration.thumbnail(family:family,plate:family == .naga ? model.sidePlate:.twelve))
+                    .renderingMode(.original).resizable().interpolation(.high).frame(width:76,height:78).accessibilityHidden(true)
                 VStack(alignment:.leading,spacing:5){
                     HStack(spacing:5){Text(family == .naga ? "Naga V3 Pro":"MX Master 3S").font(.caption.weight(.semibold));if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(.teal)}}
                     Text(status.connected ? status.connection.rawValue:"Not connected").font(.system(size:10)).foregroundStyle(.secondary)
