@@ -16,7 +16,7 @@ if [ -e "$app_dir" ]; then echo "Output already exists: $app_dir. Quit it and mo
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$build_dir/release/ThumbKey" "$app_dir/Contents/MacOS/"
 cp "$project_dir/Info.plist" "$app_dir/Contents/"
-cp "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/"
+cp "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/ThumbKeyMouse.icns"
 codesign --force --timestamp=none --sign "$identity" "$app_dir"
 codesign --verify --deep --strict "$app_dir"
 echo "Built $app_dir"

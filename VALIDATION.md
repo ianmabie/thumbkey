@@ -1,12 +1,17 @@
 # Prototype status
 
+Live model update and icon refresh, version 0.3.0 build 16 (October 18, 2026):
+
+- Includes the complete build 15 model polish. Renamed the bundled icon resource to `ThumbKeyMouse.icns` and explicitly loads it as the application icon at launch, avoiding reliance on the previously cached app image. The icon artwork is unchanged from the mouse design introduced in build 13.
+- Signed release build and clean installed-bundle verification pass. Installed at the existing path after a clean quit, retaining build 14 as rollback. The saved mappings file SHA-256 is unchanged. Native inspection confirms the new MX details and the About panel's mouse icon with version 0.3.0 (16). The Dock's pinned entry points to this same live bundle. The MX / Back button / Overview selection and paused preference are preserved.
+
 Additional photo-reference polish, version 0.3.0 build 15 (October 18, 2026):
 
 - Reviewed new manufacturer and close-up front/right/left photographs. Rebuilt the Naga ring-finger button as the long side paddle beneath right-click and added the lower textured grip. Tightened its wheel bridge and sampled all conforming cap boundaries densely to prevent edges cutting into the shell.
 - Recessed and angled the MX thumb wheel, replaced raised navigation and wheel-mode blocks with low conforming caps, and modeled shallow thumb-rest flutes in the surface. Refined graphite materials and rounded both USB-C apertures.
 - Signed release build and signature verification pass. Eighteen multi-angle review renders cover all four configurations. All 17/11/7 Naga and five MX controls pass visible-hit checks, with no missing targets. Native input, mappings, profiles, and permission code are unchanged.
 - Cached section data and shared projected vertices reduce construction/render time: the final offline pass reports 2.35/2.13/2.13 seconds for the Naga configurations and 0.50 seconds for MX on this machine, including preset renders and hit checks. These are diagnostic timings, not an interaction benchmark.
-- Live replacement is pending an unlocked Mac so the existing process can quit cleanly. The signed build 15 candidate and final review images are ready; live build 14 remains intact.
+- These model changes are installed in build 16, together with the application-icon refresh fix. The final build 15 review renders remain available locally.
 
 Extra-control and thumb-rest corrections, version 0.3.0 build 14 (October 18, 2026):
 

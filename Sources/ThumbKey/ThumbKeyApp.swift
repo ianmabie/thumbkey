@@ -2,7 +2,19 @@ import AppKit
 import SwiftUI
 import ThumbKeyCore
 
+final class ThumbKeyAppDelegate:NSObject,NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification:Notification) {
+        // In-place updates can leave the Dock's previous icon cached. Load the
+        // actual bundled mouse icon instead of relying on the cached app image.
+        if let url=Bundle.main.url(forResource:"ThumbKeyMouse",withExtension:"icns"),
+           let icon=NSImage(contentsOf:url) {
+            NSApplication.shared.applicationIconImage=icon
+        }
+    }
+}
+
 @main struct ThumbKeyApp:App {
+    @NSApplicationDelegateAdaptor(ThumbKeyAppDelegate.self) private var appDelegate
     @StateObject private var model:AppModel
     init(){
         if let index=CommandLine.arguments.firstIndex(of:"--render-mice"),CommandLine.arguments.count>index+1 {
