@@ -5,7 +5,7 @@ Extra-control and thumb-rest corrections, version 0.3.0 build 14 (October 18, 20
 - Replaced all five Naga extra-control boxes with individually shaped, beveled caps that follow the shell surface: tapered left-click shoulder buttons, closer behind-wheel controls, and a narrow curved ring-finger paddle. Constant-width recesses avoid thick black ends. Control origins and nose deformation preserve accurate clickable targets.
 - Rebuilt the MX thumb rest as a continuous upper surface, rounded lip, and underside, with zero-slope taper into the nose and heel. Removed the disconnected base-seam stubs, rolled the heel underside upward, and replaced floating skate blocks with thin pads that follow the base.
 - Signed release build succeeds. All 17/11/7 Naga and five MX controls pass the four-preset visible-hit checks. The renderer now exits with an error if any mapped target is missing. Eighteen review images cover all four configurations and add front-right Naga / rear-thumb MX views to expose the corrected areas. No input protocol, saved mapping, or permission logic changed.
-- Live installation remains pending the Mac being unlocked; the currently running app has been retained. The release candidate is signed with the existing Apple Development identity.
+- Installed build 14 at the existing app path after a clean quit, preserving the Apple Development signing identity and a rollback copy. Signature verification passed. Native inspection confirmed the updated MX thumb rest and Naga extra-control geometry. The mappings file SHA-256 was unchanged; the original paused state and MX / Back button / Overview selection were restored.
 
 Mouse icon and realism pass, version 0.3.0 build 13 (October 18, 2026):
 
@@ -13,7 +13,7 @@ Mouse icon and realism pass, version 0.3.0 build 13 (October 18, 2026):
 - Refined both models' crown curvature, rounded/lowered nose, charging-port placement, and button cap heights. Naga extra controls sit closer to the click shoulder; all 12-/6-/2-button identities and arrangements are unchanged.
 - Blended the MX thumb rest into the side surface without covering Back/Forward, reduced its rim and rib contrast, and tightened the thumb-wheel recess so it no longer overlaps the wordmark. Added subtle generated plastic grain and studio softbox reflections to distinguish graphite and metal.
 - Signed release build passes. All 16 model renders were generated; all 17/11/7 Naga and five MX controls pass visible-target ray checks. Multi-angle visual inspection includes the crown, wheel recesses, side panels, right-side control, and thumb rest. No input, mapping, permission, or profile logic changed.
-- Live installation is pending the Mac being unlocked. The current build 12 and user settings remain in place; a signed build 13 candidate and the multi-angle review PNGs are ready locally.
+- Build 13 was reviewed offline; its mouse icon and model improvements are included in the installed build 14.
 
 Surface and lighting refinement, version 0.3.0 build 12 (October 18, 2026):
 
