@@ -4,6 +4,15 @@ public enum SidePlate:Int,Codable,CaseIterable,Identifiable {
     case two=2,six=6,twelve=12
     public var id:Int {rawValue}
     public var label:String {"\(rawValue)-button plate"}
+    /// Rows viewed from the thumb side, with the nose on the left.
+    /// Keep the model and the accessible grid in the same physical order.
+    public var visualRows:[[Int]] {
+        switch self {
+        case .twelve:return [[3,6,9,12],[2,5,8,11],[1,4,7,10]]
+        case .six:return [[101,102,103],[106,105,104]]
+        case .two:return [[202,201]] // Forward is physically in front of Back.
+        }
+    }
     public var buttonIDs:[Int] {switch self {case .twelve:return Array(1...12);case .six:return Array(101...106);case .two:return Array(201...202)}}
 }
 

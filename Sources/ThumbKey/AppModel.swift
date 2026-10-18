@@ -94,7 +94,7 @@ final class AppModel: ObservableObject {
     func editStep(_ id:UUID,_ edit:(inout MacroStep)->Void) {editButton { b in if let i=b.steps.firstIndex(where:{$0.id==id}){edit(&b.steps[i])} } }
     var sideButtons:[ButtonBinding] {profile.buttons.filter{(selectedMouse == .naga ? sidePlate.buttonIDs:MouseControls.mxIDs).contains($0.id)}}
     var plateLayoutButtons:[ButtonBinding] {
-        let ids=sidePlate == .twelve ? [3,6,9,12,2,5,8,11,1,4,7,10]:sidePlate == .six ? [101,102,103,106,105,104]:sidePlate.buttonIDs
+        let ids=sidePlate.visualRows.flatMap{$0}
         return ids.compactMap{id in sideButtons.first{$0.id==id}}
     }
     var extraButtons:[ButtonBinding] {profile.buttons.filter{MouseControls.extraIDs.contains($0.id)}}

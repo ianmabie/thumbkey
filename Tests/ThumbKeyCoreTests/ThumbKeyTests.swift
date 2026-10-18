@@ -2,6 +2,17 @@ import XCTest
 @testable import ThumbKeyCore
 
 final class ThumbKeyTests:XCTestCase {
+    func testPhysicalPlateLayoutsKeepEveryMappingInItsPhotographedPosition() {
+        XCTAssertEqual(SidePlate.twelve.visualRows, [[3,6,9,12],[2,5,8,11],[1,4,7,10]])
+        XCTAssertEqual(SidePlate.six.visualRows, [[101,102,103],[106,105,104]])
+        XCTAssertEqual(SidePlate.two.visualRows, [[202,201]])
+        for plate in SidePlate.allCases {
+            let ids=plate.visualRows.flatMap{$0}
+            XCTAssertEqual(ids.count,plate.rawValue)
+            XCTAssertEqual(Set(ids),Set(plate.buttonIDs))
+        }
+    }
+
     func testRecoverySurvivesSleepAndReconnectButHonorsManualPause() {
         var recovery=MappingRecovery()
         XCTAssertNil(recovery.nextDelay())

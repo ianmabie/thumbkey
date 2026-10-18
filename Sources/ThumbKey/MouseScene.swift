@@ -22,7 +22,7 @@ struct MouseDeviceCard:View {
     var body:some View {
         Button{model.selectMouse(family)}label:{
             HStack(spacing:7){
-                MouseSceneView(family:family,plate:.twelve,selected:nil,interactive:false,onSelect:{_ in}).frame(width:76,height:78).allowsHitTesting(false).accessibilityHidden(true)
+                MouseSceneView(family:family,plate:family == .naga ? model.sidePlate:.twelve,selected:nil,interactive:false,onSelect:{_ in}).frame(width:76,height:78).allowsHitTesting(false).accessibilityHidden(true)
                 VStack(alignment:.leading,spacing:5){
                     HStack(spacing:5){Text(family == .naga ? "Naga V3 Pro":"MX Master 3S").font(.caption.weight(.semibold));if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(.teal)}}
                     Text(status.connected ? status.connection.rawValue:"Not connected").font(.system(size:10)).foregroundStyle(.secondary)
@@ -41,7 +41,7 @@ struct MouseMappingScene:View {
     @State private var angle=MouseViewAngle.overview
     var body:some View {
         VStack(spacing:8){
-            HStack{Text("BUTTON MAP").font(.caption.weight(.semibold)).foregroundStyle(.secondary);Spacer();Button{resetID=UUID()}label:{Image(systemName:"arrow.counterclockwise")}.buttonStyle(.plain).help("Reset 3D view")}
+            HStack{Text(model.selectedMouse == .naga ? "BUTTON MAP · \(model.sidePlate.rawValue)-BUTTON PLATE":"BUTTON MAP").font(.caption.weight(.semibold)).foregroundStyle(.secondary);Spacer();Button{resetID=UUID()}label:{Image(systemName:"arrow.counterclockwise")}.buttonStyle(.plain).help("Reset 3D view")}
             Picker("View angle",selection:$angle){ForEach(MouseViewAngle.allCases){angle in Text(angle.title).tag(angle)}}.pickerStyle(.segmented)
             MouseSceneView(family:model.selectedMouse,plate:model.sidePlate,selected:model.selectedButton,interactive:true,angle:angle,onSelect:model.select).id(resetID)
                 .accessibilityLabel("Rotatable 3D mouse illustration. Use the button list below to select a mapping with the keyboard.")
@@ -76,6 +76,8 @@ struct MouseSceneView:NSViewRepresentable {
     final class Coordinator {
         var family:MouseFamily?;var plate:SidePlate?;var angle:MouseViewAngle?
         var buttons=[Int:SCNNode]()
+        var baseColors=[Int:NSColor]()
+        var baseLegendColors=[Int:NSColor]()
     }
     func makeCoordinator()->Coordinator{Coordinator()}
     func makeNSView(context:Context)->SCNView {
@@ -95,6 +97,8 @@ struct MouseSceneView:NSViewRepresentable {
         if context.coordinator.family != family || context.coordinator.plate != plate {
             let result=MouseIllustration.make(family:family,plate:plate,hotspots:interactive)
             view.scene=result.0;view.pointOfView=result.1;context.coordinator.buttons=result.2
+            context.coordinator.baseColors=result.2.mapValues{$0.geometry?.firstMaterial?.diffuse.contents as? NSColor ?? .darkGray}
+            context.coordinator.baseLegendColors=result.2.mapValues{$0.childNodes.first(where:{$0.geometry is SCNText})?.geometry?.firstMaterial?.diffuse.contents as? NSColor ?? .white}
             context.coordinator.family=family;context.coordinator.plate=plate;context.coordinator.angle=nil
         }
         if context.coordinator.angle != angle {
@@ -103,10 +107,10 @@ struct MouseSceneView:NSViewRepresentable {
         }
         (view as? MouseSCNView)?.choose=onSelect
         for (id,node) in context.coordinator.buttons {
-            node.geometry?.firstMaterial?.diffuse.contents=id==selected ? NSColor.systemTeal:NSColor(calibratedWhite:0.22,alpha:1)
+            node.geometry?.firstMaterial?.diffuse.contents=id==selected ? NSColor.systemTeal:(context.coordinator.baseColors[id] ?? .darkGray)
             node.geometry?.firstMaterial?.emission.contents=id==selected ? NSColor.systemTeal.withAlphaComponent(0.3):NSColor.black
             for child in node.childNodes where child.geometry is SCNText {
-                child.geometry?.firstMaterial?.diffuse.contents=id==selected || family == .mxMaster3s ? NSColor.white:NSColor(red:0.55,green:0.95,blue:0.4,alpha:1)
+                child.geometry?.firstMaterial?.diffuse.contents=id==selected ? NSColor.white:(context.coordinator.baseLegendColors[id] ?? .white)
             }
         }
     }
