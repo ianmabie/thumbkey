@@ -33,7 +33,7 @@ The connected Bolt receiver was verified with an MX Master 3S on paired slot 2, 
 
 The mouse cards replace the dropdown. The main 3D view rotates and zooms; click a numbered marker to open that button’s editor. Selection also follows the button list, and the current mapping appears below the view. Reset restores the viewing angle. The Naga illustration changes its side pad for the selected plate.
 
-These are original built-in **illustrations with approximate positions**, not the supplied scans or measured CAD. No third-party meshes are bundled. The [downloadable MX scan by Sircher](https://sketchfab.com/3d-models/logitech-mx-master-3s-revopoint-mini-3d-scan-9a82df69ffee4c6faa28f75e65ba192c) is marked CC BY 4.0 but requires Sketchfab sign-in to download. The [supplied Naga scan](https://grabcad.com/library/razer-naga-pro-3d-scans-1) depicts the older Naga Pro, not V3 Pro; its extra-control geometry does not match. Replacing the illustrations with properly licensed, matching assets remains pending.
+These are original **photo-referenced 3D illustrations**, created from multiple manufacturer views rather than downloaded scans. They include smooth shell meshes, curved click panels, wheel grooves, MX thumb-rest details, the Naga ring-finger control, and separate plate geometry. The 12-button plate uses four columns of three; the six-button plate uses curved rows. Thumb / Top / Right presets make hidden controls easier to find. Positions remain approximate, not measured CAD; the hardware mapping itself is separate from this visualization. No Sketchfab account or internet connection is required. See [model references and construction](MODEL-REFERENCES.md).
 
 ### Side plates
 

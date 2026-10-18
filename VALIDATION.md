@@ -5,7 +5,7 @@ MX Master 3S and mouse cards, version 0.3.0 (October 18, 2026):
 - All 27 core tests passed: version 1/2→3 configuration migration preserves Naga mappings and adds five MX slots to every profile; mouse/plate routing remains separate; Logitech CID namespace, request/event filtering, temporary diversion flags, battery parsing, and transport resolution are covered.
 - Hardware diagnostic identified the connected Bolt MX Master 3S on paired slot 2, found controls 0052/0053/0056/00C3/00C4, read 65% battery over 2.4 GHz, and verified temporary diversion plus restoration for all five controls. The Naga reported 100% charging over wired USB. These checks prove protocol exchange, not physical shortcut delivery.
 - Signed MX support was installed before starting 3D work. Existing Naga mappings and app profiles were preserved, and both macOS permissions remained allowed. The LocalScribe preset reads its current configured shortcut instead of assuming the default.
-- Two selectable 3D mouse cards replace the dropdown and show per-device power/transport. Original procedural illustrations are labeled as such; the matching third-party scans are not bundled. The MX download requires login, and the supplied Naga scan is the older Pro.
+- Two selectable 3D mouse cards replace the dropdown and show per-device power/transport. Original photo-referenced models are labeled as illustrations; third-party scans and reference photos are not bundled. The initial working version was pushed as 8065478 before this modeling refinement, as requested.
 - Physical MX presses/held shortcuts, Bluetooth, receiver disconnect/recovery, and remapper conflicts still require hands-on testing. The currently selected mouse and paused/enabled preference are retained across installation.
 
 

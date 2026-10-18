@@ -5,6 +5,9 @@ import ThumbKeyCore
 @main struct ThumbKeyApp:App {
     @StateObject private var model:AppModel
     init(){
+        if let index=CommandLine.arguments.firstIndex(of:"--render-mice"),CommandLine.arguments.count>index+1 {
+            do{try MouseIllustration.exportPreviews(to:URL(fileURLWithPath:CommandLine.arguments[index+1]));print("Rendered mouse model previews.");exit(0)}catch{print(error.localizedDescription);exit(1)}
+        }
         if CommandLine.arguments.contains("--devices") {
             let capture=HIDCapture()
             for i in capture.deviceList {print("\(i.name) | \(i.transport) | product=\(String(format:"%04x",i.productID)) | input interface \(i.id)")}
@@ -92,8 +95,8 @@ struct ContentView:View {
                         ForEach(SidePlate.allCases){plate in Text("\(plate.rawValue) buttons").tag(plate)}
                     }.pickerStyle(.segmented)
                     Text("Select the attached plate after swapping it. Each plate saves its own mappings; automatic detection is not available yet.").font(.caption).foregroundStyle(.secondary)
-                    LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:10),count:model.sidePlate == .two ? 2:3),spacing:10){
-                        ForEach(model.sideButtons){button in ButtonTile(button:button)}
+                    LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:10),count:model.sidePlate == .twelve ? 4:model.sidePlate == .two ? 2:3),spacing:10){
+                        ForEach(model.plateLayoutButtons){button in ButtonTile(button:button)}
                     }
                     Divider()
                     HStack{Text("TOP & RING-FINGER BUTTONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary);Spacer()}
