@@ -1,11 +1,19 @@
 # Prototype status
 
+Mouse icon and realism pass, version 0.3.0 build 13 (October 18, 2026):
+
+- Replaced the keypad icon with an original vector-drawn mouse, split click surface, teal wheel, and two thumb buttons. Generated all ten standard/Retina PNG sizes and the bundled ICNS.
+- Refined both models' crown curvature, rounded/lowered nose, charging-port placement, and button cap heights. Naga extra controls sit closer to the click shoulder; all 12-/6-/2-button identities and arrangements are unchanged.
+- Blended the MX thumb rest into the side surface without covering Back/Forward, reduced its rim and rib contrast, and tightened the thumb-wheel recess so it no longer overlaps the wordmark. Added subtle generated plastic grain and studio softbox reflections to distinguish graphite and metal.
+- Signed release build passes. All 16 model renders were generated; all 17/11/7 Naga and five MX controls pass visible-target ray checks. Multi-angle visual inspection includes the crown, wheel recesses, side panels, right-side control, and thumb rest. No input, mapping, permission, or profile logic changed.
+- Live installation is pending the Mac being unlocked. The current build 12 and user settings remain in place; a signed build 13 candidate and the multi-angle review PNGs are ready locally.
+
 Surface and lighting refinement, version 0.3.0 build 12 (October 18, 2026):
 
 - Inspected both user-provided Polycam scans locally. Kept raw captures and desk textures out of the repository. Adjusted MX crown placement and thumb-rest termination using the scan and product references; retained the Naga's correct 12-/6-/2-button layouts.
 - Corrected uneven-section curve slopes, deformation normals, and seam paths that previously cut through curved surfaces. Replaced wheel rib cylinders with grooved lathe geometry; added physically based graphite/metal, generated studio light, contact shadows, and subtler selection. Enlarged the mapping view from 300 to 390 points.
 - Signed release build succeeds. Offline previews cover all four configurations from four preset angles; ray checks verify all 17/11/7 Naga and five MX controls remain visible/selectable from a preset. No input/configuration code changed.
-- Installed build 11 with the stable signing identity and rollback retained. Native inspection confirmed the larger mapping view and preserved paused state, but exposed a green tint in the MX card while the main model rendered correctly. Build 12 replaces live card views with cached 3D snapshots explicitly rendered in original color; the main mapping view remains interactive. Build 12 is installed and signed. Final native card/plate checks are pending because the Mac locked again. The mappings file SHA-256 remains unchanged.
+- Installed build 12 with the stable signing identity and rollback retained. Native inspection confirmed correct graphite colors in both cached mouse cards and the larger interactive MX mapping view, with the existing paused state preserved. The mappings file SHA-256 was unchanged during installation. Both connected mice continued to show battery and transport status.
 
 Photo-referenced model refinement, version 0.3.0 build 10 (October 18, 2026):
 
