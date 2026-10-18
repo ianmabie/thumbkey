@@ -1,5 +1,13 @@
 # Prototype status
 
+Additional photo-reference polish, version 0.3.0 build 15 (October 18, 2026):
+
+- Reviewed new manufacturer and close-up front/right/left photographs. Rebuilt the Naga ring-finger button as the long side paddle beneath right-click and added the lower textured grip. Tightened its wheel bridge and sampled all conforming cap boundaries densely to prevent edges cutting into the shell.
+- Recessed and angled the MX thumb wheel, replaced raised navigation and wheel-mode blocks with low conforming caps, and modeled shallow thumb-rest flutes in the surface. Refined graphite materials and rounded both USB-C apertures.
+- Signed release build and signature verification pass. Eighteen multi-angle review renders cover all four configurations. All 17/11/7 Naga and five MX controls pass visible-hit checks, with no missing targets. Native input, mappings, profiles, and permission code are unchanged.
+- Cached section data and shared projected vertices reduce construction/render time: the final offline pass reports 2.35/2.13/2.13 seconds for the Naga configurations and 0.50 seconds for MX on this machine, including preset renders and hit checks. These are diagnostic timings, not an interaction benchmark.
+- Live replacement is pending an unlocked Mac so the existing process can quit cleanly. The signed build 15 candidate and final review images are ready; live build 14 remains intact.
+
 Extra-control and thumb-rest corrections, version 0.3.0 build 14 (October 18, 2026):
 
 - Replaced all five Naga extra-control boxes with individually shaped, beveled caps that follow the shell surface: tapered left-click shoulder buttons, closer behind-wheel controls, and a narrow curved ring-finger paddle. Constant-width recesses avoid thick black ends. Control origins and nose deformation preserve accurate clickable targets.

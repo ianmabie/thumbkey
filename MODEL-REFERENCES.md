@@ -11,12 +11,14 @@ The user also supplied Polycam USDZ scans of both mice. Both were inspected loca
 - [Manufacturer product gallery](https://www.logitech.com/en-us/shop/p/mx-master-3s): top, left profile, underside, rear, and front three-quarter views.
 - [Manufacturer getting-started guide](https://support.logi.com/hc/en-za/articles/5218056588311-Getting-Started-MX-Master-3S): multi-view overview and Back/Forward close-up, including wheel, gesture button, and charging port locations.
 - User-supplied three-quarter product photograph and additional straight top view / close thumb-side photograph (`mx-master-3s-bluetooth-edition-top-view-graphite-new-1.webp`, `design-medium.jpg`).
+- Build 15 additionally compares the [current manufacturer gallery](https://www.logi.com/en-us/shop/p/mx-master-3s.910-007500), [pale-gray front view](https://media.hifi.lu/sys-master/products/9213068836894/2160x2160.62008318_02.webp), and [close left-side photograph](https://img.mezha.ua/mezhaprod/system/MediaPhoto/photo/L/o/190977/Logitech-MX-Master-3S-13.jpg). The lighter finish makes the capsule wheel recess, sloped axle, low navigation caps, shallow ribs, and rolled lower edge easier to distinguish.
 
 ### Razer Naga V3 Pro
 
 - [Manufacturer product page](https://www.razer.com/gaming-mice/razer-naga-v3-pro): labeled top and left profile, isolated side profile, 12-/6-/2-button plates, front/right wheel detail, and in-hand side views.
 - Additional user-supplied top, front/left, and detached-plate photographs (`shopping.jpeg`, `shopping 2.jpeg`, `images 2.jpeg`, and `Review--Razer-Naga-V3-Pro.jpg.webp`) establish panel fit and individual cap locations.
 - The V3 photographs establish four columns of three for the 12-button plate (1/2/3 bottom-to-top in the front column, through 10/11/12 in the rear), curved 1/2/3 and 6/5/4 rows for the six-button plate, the raised ring-finger control, and two edge controls beside left-click.
+- Build 15 also uses the [manufacturer product gallery](https://www.razer.com/gb-en/gaming-mice/razer-naga-v3-pro/RZ01-05660100-R3G1) and front/right-flank close-ups in [GamesRadar's V3 review](https://www.gamesradar.com/hardware/gaming-mice/razer-naga-v3-pro-review/). These show that the ring-finger control is a long paddle below right-click, with a separate textured grip beneath it, rather than a small switch on the crown.
 
 These pages inform shape and location only. Firmware input identities and button delivery still require separate physical validation; they cannot be proved from photos.
 
@@ -27,6 +29,8 @@ These pages inform shape and location only. Firmware input identities and button
 `SidePlate.visualRows` is the shared physical layout for the geometry and accessible button grid. In thumb-side view (nose left), the 12-button top row is 3/6/9/12, middle 2/5/8/11, bottom 1/4/7/10. The six-button rows are 1/2/3 then 6/5/4. On the two-button plate, Forward is ahead of Back. Saved configuration IDs and input identities are preserved. Physical plate detection still requires selecting the attached plate in the UI; the model does not claim to detect a hardware swap.
 
 The Naga's five extra controls use separate shell-conforming cap meshes with tapered outlines, low bevels, and constant-width recesses. They retain individual control origins for hit testing. The MX thumb ledge is a continuous rolled profile with an underside; its extension and thickness taper into the body at both ends. The heel and thin skate surfaces follow the base instead of leaving detached rectangular edges.
+
+The build 15 pass extends the conforming-cap construction to either flank, densely samples cap boundaries before projection, and fits the Naga ring-finger paddle to the side. The MX thumb-wheel axle follows the housing slope, Back/Forward and wheel-mode controls sit close to the body, and the thumb-rest flutes are shallow surface geometry instead of overlaid lines. Both charging ports have rounded USB-C apertures. Shared projected vertices and cached shell sections reduce construction cost while retaining precise surface normals.
 
 Each mapped control has a stable `button-<configuration id>` scene node. Clicking the nearest visible surface selects that button; the picker does not select a hidden control through the shell. The matching button list remains available for keyboard/accessibility use. Selecting a plate changes both its mesh and its physical arrangement in the list without changing stored button identities. The view presets reset camera position; dragging and scrolling allow further inspection.
 
