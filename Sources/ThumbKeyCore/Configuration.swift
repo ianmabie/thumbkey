@@ -56,10 +56,11 @@ public struct Profile: Codable, Identifiable, Equatable {
     public var bundleID: String = ""
     public var buttons = MouseControls.defaults()
     public init() {}
+    public func buttons(for family:MouseFamily,plate:SidePlate)->[ButtonBinding]{family == .naga ? buttons(for:plate):buttons.filter{MouseControls.mxIDs.contains($0.id)}}
     public func buttons(for plate:SidePlate)->[ButtonBinding] {buttons.filter{plate.buttonIDs.contains($0.id) || MouseControls.extraIDs.contains($0.id)}}
 }
 public struct Configuration: Codable, Equatable {
-    public var version = 2
+    public var version = 3
     public var profiles = [Profile()]
     public init() {}
     public func profile(for bundleID: String?) -> Profile { profiles.first { !$0.bundleID.isEmpty && $0.bundleID == bundleID } ?? profiles[0] }
@@ -68,11 +69,19 @@ public struct Configuration: Codable, Equatable {
             var migrated=self
             for i in migrated.profiles.indices {
                 guard migrated.profiles[i].buttons.count==12,Set(migrated.profiles[i].buttons.map(\.id))==Set(1...12) else{throw ConfigError.invalid}
-                migrated.profiles[i].buttons += MouseControls.defaults().filter{$0.id>12}
+                migrated.profiles[i].buttons += MouseControls.defaults().filter{$0.id>12 && !MouseControls.mxIDs.contains($0.id)}
             }
             migrated.version=2;return try migrated.validated()
         }
-        guard version == 2, !profiles.isEmpty, profiles.count <= 50, profiles[0].bundleID.isEmpty else { throw ConfigError.invalid }
+        if version==2 {
+            var migrated=self
+            for i in migrated.profiles.indices {
+                guard Set(migrated.profiles[i].buttons.map(\.id))==Set(MouseControls.nagaIDs),migrated.profiles[i].buttons.count==MouseControls.nagaIDs.count else{throw ConfigError.invalid}
+                migrated.profiles[i].buttons += MouseControls.mxDefaults()
+            }
+            migrated.version=3;return try migrated.validated()
+        }
+        guard version == 3, !profiles.isEmpty, profiles.count <= 50, profiles[0].bundleID.isEmpty else { throw ConfigError.invalid }
         guard Set(profiles.map(\.id)).count == profiles.count else { throw ConfigError.invalid }
         let scoped = profiles.dropFirst().map(\.bundleID)
         guard !scoped.contains(""), Set(scoped).count == scoped.count else { throw ConfigError.invalid }
@@ -82,6 +91,8 @@ public struct Configuration: Codable, Equatable {
                 let usages=profile.buttons(for:plate).compactMap(\.usage)
                 guard Set(usages).count==usages.count,usages.allSatisfy(InputSource.valid) else{throw ConfigError.invalid}
             }
+            let mx=profile.buttons(for:.mxMaster3s,plate:.twelve).compactMap(\.usage)
+            guard Set(mx).count==mx.count,mx.allSatisfy({InputSource.logitechControl($0).map{LogitechProtocol.controlIDs.contains($0)} ?? false}) else{throw ConfigError.invalid}
             for b in profile.buttons {
                 guard b.steps.count <= 100, Set(b.steps.map(\.id)).count == b.steps.count, b.name.count <= 100, valid(b.chord) else { throw ConfigError.invalid }
                 for s in b.steps { guard valid(s.chord), s.text.utf16.count <= 4096, (0...60000).contains(s.milliseconds) else { throw ConfigError.invalid } }
@@ -91,10 +102,10 @@ public struct Configuration: Codable, Equatable {
         return self
     }
     /// Change physical identity atomically across profiles, keeping other plates intact.
-    public func identifying(button target:Int,usage:UInt32,plate:SidePlate) throws -> Self {
-        guard InputSource.valid(usage),plate.buttonIDs.contains(target) || MouseControls.extraIDs.contains(target) else{throw ConfigError.invalid}
+    public func identifying(button target:Int,usage:UInt32,plate:SidePlate,family:MouseFamily = .naga) throws -> Self {
+        guard InputSource.valid(usage),(family == .mxMaster3s ? MouseControls.mxIDs.contains(target):plate.buttonIDs.contains(target) || MouseControls.extraIDs.contains(target)) else{throw ConfigError.invalid}
         var next=self
-        let group=MouseControls.extraIDs.contains(target) ? MouseControls.extraIDs:plate.buttonIDs
+        let group=family == .mxMaster3s ? MouseControls.mxIDs:MouseControls.extraIDs.contains(target) ? MouseControls.extraIDs:plate.buttonIDs
         for p in next.profiles.indices {
             guard let index=next.profiles[p].buttons.firstIndex(where:{$0.id==target}) else{throw ConfigError.invalid}
             let old=next.profiles[p].buttons[index].usage

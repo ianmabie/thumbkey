@@ -153,11 +153,11 @@ final class ExtraControlTests:XCTestCase {
         var app=legacy.profiles[0];app.id=UUID();app.bundleID="example.Editor";app.name="Editor"
         app.buttons[1].mode = .disabled;legacy.profiles.append(app)
         let migrated=try legacy.validated()
-        XCTAssertEqual(migrated.version,2)
+        XCTAssertEqual(migrated.version,3)
         for index in legacy.profiles.indices {
             XCTAssertEqual(Array(migrated.profiles[index].buttons.prefix(12)),legacy.profiles[index].buttons)
             XCTAssertEqual(migrated.profiles[index].id,legacy.profiles[index].id)
-            XCTAssertEqual(migrated.profiles[index].buttons.count,25)
+            XCTAssertEqual(migrated.profiles[index].buttons.count,30)
         }
         XCTAssertEqual(try JSONDecoder().decode(Configuration.self,from:JSONEncoder().encode(migrated)).validated(),migrated)
     }
@@ -221,5 +221,48 @@ final class ExtraControlTests:XCTestCase {
         XCTAssertEqual(ModifierKey.flags(physical:0,pressed:[]),0)
         XCTAssertEqual(ModifierKey.flags(physical:(1<<17)|2,pressed:[54]),right|(1<<17)|2)
         XCTAssertEqual(Chord(keyCode:55,modifiers:.command).keys,[55])
+    }
+}
+
+final class LogitechTests:XCTestCase {
+    func testVersionTwoMigrationKeepsNagaAndAddsSeparateMXBank()throws {
+        var old=Configuration();old.version=2
+        old.profiles[0].buttons.removeAll{MouseControls.mxIDs.contains($0.id)}
+        old.profiles[0].buttons[0].name="Existing dictation"
+        let previous=old.profiles[0].buttons
+        let next=try old.validated()
+        XCTAssertEqual(next.version,3)
+        XCTAssertEqual(next.profiles[0].buttons.filter{MouseControls.nagaIDs.contains($0.id)},previous)
+        let mx=next.profiles[0].buttons(for:.mxMaster3s,plate:.twelve)
+        XCTAssertEqual(mx.map(\.id),Array(301...305))
+        XCTAssertEqual(mx.compactMap(\.usage),[0x53,0x56,0x52,0xc3,0xc4].map{InputSource.logitech(UInt16($0))})
+        XCTAssertTrue(mx.compactMap(\.usage).allSatisfy{InputSource.eventCode($0)==nil})
+    }
+    func testHIDPPRequestsChangeOnlyTemporaryDiversion() {
+        let packet=LogitechProtocol.request(device:2,feature:9,function:3,payload:LogitechProtocol.diversion(0xc3,enabled:true))
+        XCTAssertEqual(packet.count,20)
+        XCTAssertEqual(Array(packet.prefix(9)),[17,2,9,0x3c,0,0xc3,3,0,0])
+        XCTAssertEqual(LogitechProtocol.diversion(0xc3,enabled:false),[0,0xc3,2,0,0])
+        XCTAssertEqual(LogitechProtocol.normalize(reportID:17,bytes:Array(packet.dropFirst())),packet)
+        XCTAssertNil(LogitechProtocol.normalize(reportID:17,bytes:[17,2,9]))
+    }
+    func testButtonReportsCannotCrossReceiverSlotsOrFeatures() {
+        var packet=[UInt8](repeating:0,count:20);packet[0]=17;packet[1]=2;packet[2]=9;packet[5]=0x53;packet[7]=0xc3
+        XCTAssertEqual(LogitechProtocol.pressed(packet,device:2,feature:9),[0x53,0xc3])
+        XCTAssertNil(LogitechProtocol.pressed(packet,device:1,feature:9))
+        XCTAssertNil(LogitechProtocol.pressed(packet,device:2,feature:8))
+        packet[3]=0x0c;XCTAssertNil(LogitechProtocol.pressed(packet,device:2,feature:9))
+        packet[3]=0;packet[5]=0;packet[7]=0;XCTAssertEqual(LogitechProtocol.pressed(packet,device:2,feature:9),[])
+    }
+    func testBatteryAndConnectionUseObservedTransportAndValidatedValues() {
+        XCTAssertEqual(MouseConnection.resolve(vendor:0x46d,product:0xc548,transport:"USB"),.wireless)
+        XCTAssertEqual(MouseConnection.resolve(vendor:0x46d,product:0xb034,transport:"Bluetooth Low Energy"),.bluetooth)
+        XCTAssertEqual(MouseConnection.resolve(vendor:0x1532,product:0x00e7,transport:"USB"),.wired)
+        XCTAssertEqual(MouseConnection.resolve(vendor:0x1532,product:0x00e8,transport:"USB"),.wireless)
+        XCTAssertEqual(MousePower.logitech([87,4,0,0]).percent,87)
+        XCTAssertEqual(MousePower.logitech([87,4,1,0]).charging,true)
+        XCTAssertNil(MousePower.logitech([0,4,0,0]).percent)
+        XCTAssertNil(MousePower.logitech([150,4,0,0]).percent)
+        XCTAssertEqual(MousePower.logitech([]).label,"Battery unavailable")
     }
 }

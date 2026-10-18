@@ -1,12 +1,12 @@
 # ThumbKey
 
-A small, local macOS app for mapping Razer Naga buttons to shortcuts, held keys, typed text, and macros. Native SwiftUI, macOS 14+, no dependencies, accounts, or network requests.
+A small, local macOS app for mapping Razer Naga and Logitech MX Master 3S buttons to shortcuts, held keys, typed text, and macros. Native SwiftUI, macOS 14+, no dependencies, accounts, or network requests.
 
 ## Use
 
 Build with `Scripts/build-app.sh`, then open `../ThumbKey.app`. Grant **Input Monitoring** (reads button input) and **Accessibility** (sends shortcuts). Enable mappings in the window. ThumbKey remembers whether mappings were enabled across relaunches, sleep, and reconnects. Pause releases held keys and restores normal mouse reporting.
 
-Choose your attached **2-, 6-, or 12-button side plate**, select a button, and choose an action:
+Select a mouse using its 3D card beside the title. Each card shows battery level, charging state when available, and Wired USB / 2.4 GHz wireless / Bluetooth from the active transport. Refresh updates both cards; unavailable readings are shown explicitly. Then select a button in the rotatable 3D illustration or the matching numbered list and choose an action. Naga users also select the attached **2-, 6-, or 12-button side plate**:
 
 | Action | Behavior |
 | --- | --- |
@@ -21,7 +21,19 @@ Click the key recorder and press a combination on your regular keyboard. For a m
 **Fill in a dictation shortcut** offers two presets. These fill in keys; they do not launch or configure the other app:
 
 - **Superwhispr**: hold Right Command. Select Right Command as the push-to-talk key in Superwhispr too.
-- **LocalScribe**: hold Control–Option–Space. LocalScribe must be running with that shortcut. This remains the initial button 1 mapping for a new configuration.
+- **LocalScribe**: reads LocalScribe’s current configured keyboard shortcut and fills it as held keys. Reapply the preset if that shortcut changes. If no saved shortcut exists, it uses Control–Option–Space, which is also the initial button 1 mapping for a new configuration.
+
+### MX Master 3S
+
+Five physical presses are supported: Back, Forward, main wheel click, thumb-rest gesture press, and the wheel-mode button. The thumb rest maps its press, not movement gestures. Primary left/right clicks and vertical/horizontal scrolling stay native. Only assigned buttons are temporarily diverted through HID++ 2.0 REPROG_CONTROLS_V4; pause, quit, or a startup failure restores each button’s previous reporting state. No persistent button configuration, DPI, or onboard settings are written. Avoid running another mouse remapper on the same buttons.
+
+The connected Bolt receiver was verified with an MX Master 3S on paired slot 2, including all five temporary button diversions and restoration. Bluetooth has a code path but has not been physically validated. A USB charging cable does not turn an MX Master into a wired data mouse; the card continues to show its actual wireless transport. Receiver presence alone cannot prove the paired mouse is awake; a failed query shows unavailable battery data rather than an invented percentage.
+
+### 3D views
+
+The mouse cards replace the dropdown. The main 3D view rotates and zooms; click a numbered marker to open that button’s editor. Selection also follows the button list, and the current mapping appears below the view. Reset restores the viewing angle. The Naga illustration changes its side pad for the selected plate.
+
+These are original built-in **illustrations with approximate positions**, not the supplied scans or measured CAD. No third-party meshes are bundled. The [downloadable MX scan by Sircher](https://sketchfab.com/3d-models/logitech-mx-master-3s-revopoint-mini-3d-scan-9a82df69ffee4c6faa28f75e65ba192c) is marked CC BY 4.0 but requires Sketchfab sign-in to download. The [supplied Naga scan](https://grabcad.com/library/razer-naga-pro-3d-scans-1) depicts the older Naga Pro, not V3 Pro; its extra-control geometry does not match. Replacing the illustrations with properly licensed, matching assets remains pending.
 
 ### Side plates
 
@@ -71,3 +83,5 @@ Override build paths with `THUMBKEY_BUILD_DIR`, `THUMBKEY_CACHE_DIR`, `THUMBKEY_
 Tests cover configuration migration, per-plate routing/learning, actual V3 keyboard/mouse report descriptors, dedicated reports, mode packet validation, left/right modifier flags, held-key ownership, recovery, and conservative input correlation. See [VALIDATION.md](VALIDATION.md) for completed checks and physical checks still pending.
 
 Protocol research used the [OpenRazer V3 Pro pull request](https://github.com/openrazer/openrazer/pull/2904), [hardware issue](https://github.com/openrazer/openrazer/issues/2885), and [naga-control](https://github.com/Rainexn0b/naga-control). ThumbKey implements the observed wire format independently and includes no code or dependency from those projects.
+
+MX protocol references: [Logitech HID++ feature documentation](https://github.com/Logitech/cpg-docs), [OpenLogi device IDs](https://openlogi.org/hidpp/model-ids), and [Solaar’s observed wire formats](https://github.com/pwr-Solaar/Solaar). ThumbKey implements the protocol independently and bundles no code from these projects. `--check-mx` reads device/control/battery data; `--check-mx-buttons` also verifies temporary diversion and restoration of all five controls without starting mappings.

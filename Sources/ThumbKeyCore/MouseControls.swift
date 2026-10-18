@@ -9,10 +9,17 @@ public enum SidePlate:Int,Codable,CaseIterable,Identifiable {
 
 public enum MouseControls {
     public static let extraIDs=Array(13...17)
-    public static let allIDs=SidePlate.allCases.flatMap(\.buttonIDs)+extraIDs
+    public static let nagaIDs=SidePlate.allCases.flatMap(\.buttonIDs)+extraIDs
+    public static let mxIDs=Array(301...305)
+    public static let allIDs=nagaIDs+mxIDs
     public static func number(_ id:Int)->Int {id>=200 ? id-200:id>=100 ? id-100:id}
     public static func title(_ id:Int)->String {
         switch id {
+        case 301:return "Back button"
+        case 302:return "Forward button"
+        case 303:return "Wheel click"
+        case 304:return "Thumb gesture button"
+        case 305:return "Wheel-mode button"
         case 13:return "Left edge · front"
         case 14:return "Left edge · rear"
         case 15:return "Behind wheel · front"
@@ -25,6 +32,11 @@ public enum MouseControls {
     }
     public static func location(_ id:Int)->String {
         switch id {
+        case 301:return "The rear thumb button below the horizontal wheel."
+        case 302:return "The front thumb button below the horizontal wheel."
+        case 303:return "Press the main scroll wheel straight down."
+        case 304:return "Press down on the thumb rest. This maps the press; movement gestures are not remapped."
+        case 305:return "The small button directly behind the main scroll wheel. Usually switches wheel mode."
         case 13:return "The front small button beside the left mouse button. Usually DPI up."
         case 14:return "The rear small button beside the left mouse button. Usually DPI down."
         case 15:return "The front button directly behind the scroll wheel. Usually scroll-mode control. Use Identify to check its input."
@@ -39,21 +51,28 @@ public enum MouseControls {
         let two=[ButtonBinding(id:201,usage:InputSource.mouse(4)),ButtonBinding(id:202,usage:InputSource.mouse(5))]
         let extra=[ButtonBinding(id:13,usage:InputSource.vendor(0x20)),ButtonBinding(id:14,usage:InputSource.vendor(0x21)),
                    ButtonBinding(id:15,usage:nil),ButtonBinding(id:16,usage:InputSource.vendor(0xd2)),ButtonBinding(id:17,usage:InputSource.vendor(0x59))]
-        return twelve+extra+six+two
+        return twelve+extra+six+two+mxDefaults()
     }
+    public static func mxDefaults()->[ButtonBinding] {
+        [UInt16(0x53),0x56,0x52,0xc3,0xc4].enumerated().map{ButtonBinding(id:301+$0.offset,usage:InputSource.logitech($0.element))}
+    }
+
 }
 
 public enum InputSource {
+    public static func logitech(_ cid:UInt16)->UInt32{0xff01_0000|UInt32(cid)}
+    public static func logitechControl(_ value:UInt32)->UInt16?{value&0xffff_0000==0xff01_0000 && value&0xffff>0 ? UInt16(value&0xffff):nil}
     public static func mouse(_ button:UInt32)->UInt32 {0x0009_0000|button}
     public static func vendor(_ code:UInt32)->UInt32 {0xff00_0000|code}
     public static func isVendor(_ value:UInt32)->Bool {value&0xffff_ff00 == 0xff00_0000 && value&255>0}
     public static func mouseButton(_ value:UInt32)->UInt32? {value&0xffff_0000 == 0x0009_0000 && (4...32).contains(value&0xffff) ? value&0xffff:nil}
-    public static func valid(_ value:UInt32)->Bool {isVendor(value) || mouseButton(value) != nil || ((4...255).contains(value) && !(224...231).contains(value))}
+    public static func valid(_ value:UInt32)->Bool {isVendor(value) || logitechControl(value) != nil || mouseButton(value) != nil || ((4...255).contains(value) && !(224...231).contains(value))}
     public static func eventCode(_ value:UInt32)->UInt16? {
         if let button=mouseButton(value){return UInt16(0x100+button-1)}
         return KeyboardMap.usageToKey[value]
     }
     public static func description(_ value:UInt32)->String {
+        if let cid=logitechControl(value){return "Logitech control \(String(format:"%04X",cid))"}
         if isVendor(value){return "Mouse hardware signal \(String(format:"%02X",value&255))"}
         if let button=mouseButton(value){return "Mouse button \(button)"}
         if (30...38).contains(value){return "Keyboard \(value-29)"}

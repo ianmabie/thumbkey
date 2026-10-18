@@ -6,10 +6,10 @@
 <key>CFBundleDisplayName</key><string>ThumbKey</string>
 <key>CFBundleExecutable</key><string>ThumbKey</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.2.0</string>
-<key>CFBundleVersion</key><string>5</string>
+<key>CFBundleShortVersionString</key><string>0.3.0</string>
+<key>CFBundleVersion</key><string>7</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>CFBundleIconFile</key><string>AppIcon</string>
-<key>NSInputMonitoringUsageDescription</key><string>ThumbKey reads side-button input from your Razer Naga so you can assign shortcuts.</string>
+<key>NSInputMonitoringUsageDescription</key><string>ThumbKey reads side-button input from your selected mouse so you can assign shortcuts.</string>
 </dict></plist>

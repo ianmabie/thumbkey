@@ -12,6 +12,8 @@ struct NagaInterface: Identifiable {
     let layout: KeyboardReportLayout
     let isNaga:Bool
     let isMouse:Bool
+    var isMX:Bool{isMouse && HIDCapture.number(device,kIOHIDVendorIDKey)==0x046d && [0xc548,0xb034,0xb043].contains(productID)}
+    func matches(_ family:MouseFamily)->Bool{family == .naga ? isNaga:isMX}
 }
 
 /// Read HID reports without seizing a device; filter keyboard/side-mouse events with
@@ -30,6 +32,7 @@ final class HIDCapture {
     private var vendorStates:[UInt64:Set<UInt32>]=[:]
     private var activeVendor:[UInt32:Press]=[:]
     private var extraButtons=false
+    private var selectedFamily=MouseFamily.naga
     private var activityAt=Date.distantPast
     private var tap:CFMachPort?
     private var tapContext:TapContext?
@@ -57,8 +60,9 @@ final class HIDCapture {
     static func number(_ d:IOHIDDevice,_ key:String)->Int{(IOHIDDeviceGetProperty(d,key as CFString) as? NSNumber)?.intValue ?? 0}
     static func text(_ d:IOHIDDevice,_ key:String)->String{IOHIDDeviceGetProperty(d,key as CFString) as? String ?? ""}
     static func identifier(_ d:IOHIDDevice)->UInt64{var id:UInt64=0;IORegistryEntryGetRegistryEntryID(IOHIDDeviceGetService(d),&id);return id}
-    var deviceList:[NagaInterface]{interfaces.values.filter(\.isNaga).sorted{$0.id<$1.id}}
-    var capturedCount:Int{endpoints.values.filter{$0.interface.isNaga}.count}
+    var deviceList:[NagaInterface]{interfaces.values.filter{$0.isNaga || $0.isMX}.sorted{$0.id<$1.id}}
+    var capturedCount:Int{endpoints.values.filter{$0.interface.matches(selectedFamily)}.count}
+    func setFamily(_ family:MouseFamily){condition.lock();selectedFamily=family;condition.unlock()}
     var isRunning:Bool{condition.lock();defer{condition.unlock()};return running}
     func setExtraButtonsEnabled(_ enabled:Bool){condition.lock();extraButtons=enabled;condition.unlock()}
     func setBindings(_ next:[ButtonBinding],learning:Bool){
@@ -92,7 +96,7 @@ final class HIDCapture {
     @discardableResult func start()->Bool{
         stop()
         for id in interfaces.keys.sorted(){if !open(id){stop();return false}}
-        guard capturedCount>0 else{stop();onError?("No supported Naga side pad is connected.");return false}
+        guard capturedCount>0 else{stop();onError?("No supported mouse is connected.");return false}
         let mask=(1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.otherMouseUp.rawValue)
         let current=UUID()
         let context=TapContext(owner:self,generation:current)
@@ -160,7 +164,7 @@ final class HIDCapture {
     private func record(endpoint:Endpoint,downs:Set<UInt32>,ups:Set<UInt32>,timestamp:UInt64){
         condition.lock();defer{condition.unlock()};guard running else{return}
         for (keys,down) in [(downs,true),(ups,false)]{for usage in keys where InputSource.eventCode(usage) != nil && !(224...231).contains(usage){
-            correlation.record(.init(usage:usage,down:down,timestamp:timestamp,naga:endpoint.interface.isNaga,device:endpoint.interface.id))
+            correlation.record(.init(usage:usage,down:down,timestamp:timestamp,naga:endpoint.interface.isNaga && selectedFamily == .naga,device:endpoint.interface.id))
             if endpoint.interface.isNaga && down{let current=generation;DispatchQueue.main.async{[weak self] in guard let self,self.isCurrent(current) else{return};self.onHardwarePress?(usage)}}
         }}
         condition.broadcast()

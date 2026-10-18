@@ -8,7 +8,7 @@ import ThumbKeyCore
         if CommandLine.arguments.contains("--devices") {
             let capture=HIDCapture()
             for i in capture.deviceList {print("\(i.name) | \(i.transport) | product=\(String(format:"%04x",i.productID)) | input interface \(i.id)")}
-            print("\(capture.deviceList.count) supported Naga input interfaces; no input capture opened.")
+            print("\(capture.deviceList.count) supported mouse input interfaces; no input capture opened.")
             exit(0)
         }
         if CommandLine.arguments.contains("--check-extra-mode") {
@@ -17,6 +17,18 @@ import ThumbKeyCore
                 try mode.activate();print("Confirmed temporary extra-button reporting mode (03 00).")
                 try mode.restore();print("Confirmed restoration of the original reporting mode.");exit(0)
             } catch {print("Extra-button mode check failed: \(error.localizedDescription)");exit(1)}
+        }
+        if CommandLine.arguments.contains("--check-mx") || CommandLine.arguments.contains("--check-mx-buttons") {
+            let controller=LogitechController()
+            do {
+                try controller.connect();print("MX Master 3S · \(controller.connection.rawValue) · \(controller.power().label)")
+                print("Programmable controls: \(controller.supportedControls.sorted().map{String(format:"%04x",$0)}.joined(separator:", "))")
+                if CommandLine.arguments.contains("--check-mx-buttons") {
+                    var buttons=MouseControls.mxDefaults();for i in buttons.indices{buttons[i].mode = .disabled}
+                    try controller.configure(buttons,learning:false);print("Verified temporary diversion for all five buttons.")
+                }
+                try controller.stop();print("Original button reporting restored.");exit(0)
+            }catch{try? controller.stop();print(error.localizedDescription);exit(1)}
         }
         _model=StateObject(wrappedValue:AppModel())
     }
@@ -47,16 +59,19 @@ struct ContentView:View {
     private let accent=Color(red:0.04,green:0.46,blue:0.37)
     var body:some View {
         VStack(spacing:0) {
-            HStack(spacing:14){
-                Image(systemName:"circle.grid.3x3.fill").font(.system(size:26)).foregroundStyle(accent)
-                VStack(alignment:.leading,spacing:3){Text("ThumbKey").font(.title2.bold());Text("Your mouse. Your shortcuts.").font(.subheadline).foregroundStyle(.secondary)}
-                Spacer()
-                VStack(alignment:.trailing,spacing:4){Label(model.mappingStatus,systemImage:model.enabled ? "circle.fill":"exclamationmark.circle").foregroundStyle(model.enabled ? accent:Color.orange).font(.subheadline.weight(.medium));Text(model.deviceName).font(.caption).foregroundStyle(.secondary)}
-                Button(model.wantsMappings ? "Pause":"Enable mappings"){model.toggleEnabled()}.buttonStyle(.borderedProminent).tint(accent)
-            }.padding(24)
+            HStack(spacing:18){
+                VStack(alignment:.leading,spacing:5){Text("ThumbKey").font(.title2.bold());Text("Your mouse. Your shortcuts.").font(.caption).foregroundStyle(.secondary)}
+                HStack(spacing:10){ForEach(MouseFamily.allCases){family in MouseDeviceCard(family:family)}}
+                Spacer(minLength:0)
+                VStack(alignment:.trailing,spacing:10){
+                    Label(model.mappingStatus,systemImage:model.enabled ? "circle.fill":"pause.circle").foregroundStyle(model.enabled ? accent:Color.secondary).font(.caption.weight(.medium))
+                    HStack{Button{model.refreshMouseStatus()}label:{Image(systemName:"arrow.clockwise")}.buttonStyle(.plain).help("Refresh mouse batteries and connections")
+                        Button(model.wantsMappings ? "Pause":"Enable mappings"){model.toggleEnabled()}.buttonStyle(.borderedProminent).tint(accent)}
+                }
+            }.padding(.horizontal,24).padding(.vertical,16)
             Divider()
             if !model.inputAllowed || !model.accessibilityAllowed {
-                HStack(alignment:.center,spacing:16){Image(systemName:"hand.raised").font(.title2);VStack(alignment:.leading,spacing:4){Text("Allow ThumbKey to remap your side pad").font(.headline);Text("Input Monitoring reads the Naga buttons. Accessibility sends your chosen shortcuts.").font(.caption).foregroundStyle(.secondary)};Spacer();Button(model.inputAllowed ? "Input Monitoring ✓":"Allow Input Monitoring"){model.requestInput()}.disabled(model.inputAllowed);Button(model.accessibilityAllowed ? "Accessibility ✓":"Allow Accessibility"){model.requestAccessibility()}.disabled(model.accessibilityAllowed)}.padding(16).background(accent.opacity(0.06));Divider()
+                HStack(alignment:.center,spacing:16){Image(systemName:"hand.raised").font(.title2);VStack(alignment:.leading,spacing:4){Text("Allow ThumbKey to remap your side pad").font(.headline);Text("Input Monitoring reads mouse buttons. Accessibility sends your chosen shortcuts.").font(.caption).foregroundStyle(.secondary)};Spacer();Button(model.inputAllowed ? "Input Monitoring ✓":"Allow Input Monitoring"){model.requestInput()}.disabled(model.inputAllowed);Button(model.accessibilityAllowed ? "Accessibility ✓":"Allow Accessibility"){model.requestAccessibility()}.disabled(model.accessibilityAllowed)}.padding(16).background(accent.opacity(0.06));Divider()
             }
             HStack(spacing:12){
                 Text("Profile").foregroundStyle(.secondary)
@@ -69,6 +84,9 @@ struct ContentView:View {
             Divider()
             HSplitView {
                 ScrollView { VStack(alignment:.leading,spacing:18){
+                    MouseMappingScene().frame(height:300)
+
+                    if model.selectedMouse == .naga {
                     Text("SIDE PLATE").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Picker("Attached side plate",selection:Binding(get:{model.sidePlate},set:{model.selectPlate($0)})) {
                         ForEach(SidePlate.allCases){plate in Text("\(plate.rawValue) buttons").tag(plate)}
@@ -82,6 +100,12 @@ struct ContentView:View {
                     Toggle("Enable extra-button reporting",isOn:Binding(get:{model.extraButtonsEnabled},set:{model.setExtraButtons($0)}))
                     Text("Uses a temporary mouse mode over USB or the USB receiver. The original mode returns when you pause or quit. Unassigned extra buttons may stop their usual DPI or wheel functions while enabled.").font(.caption).foregroundStyle(.secondary)
                     VStack(spacing:8){ForEach(model.extraButtons){button in ButtonTile(button:button,compact:true)}}
+                    } else {
+                        Text("MX MASTER 3S BUTTONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text("Choose a button, then assign a shortcut or macro. ThumbKey temporarily takes control only of assigned buttons. Pause restores their original behavior.").font(.caption).foregroundStyle(.secondary)
+                        VStack(spacing:10){ForEach(model.sideButtons){button in ButtonTile(button:button,compact:true)}}
+                        Label("Scrolling and primary clicks keep working normally.",systemImage:"cursorarrow").font(.caption).foregroundStyle(.secondary)
+                    }
                     if let last=model.lastButton{Label("Last press: \(MouseControls.title(last))",systemImage:"checkmark.circle").font(.caption).foregroundStyle(accent)}
                     Spacer(minLength:0)
                     Label("Runs locally. No accounts or network requests.",systemImage:"lock").font(.caption).foregroundStyle(.secondary)
@@ -104,7 +128,7 @@ struct ButtonTile:View {
         Button{model.select(button.id)}label:{
             Group {
                 if compact {
-                    HStack(spacing:12){Image(systemName:selected ? "checkmark.circle.fill":"circle").foregroundStyle(selected ? accent:Color.secondary);VStack(alignment:.leading,spacing:4){Text(MouseControls.title(button.id)).font(.subheadline.weight(.medium));Text(button.detail).font(.caption).foregroundStyle(.secondary)};Spacer()}
+                    HStack(spacing:12){Text("\(button.id>=301 ? button.id-300:MouseControls.number(button.id))").font(.caption.weight(.bold)).frame(width:25,height:25).background(selected ? accent.opacity(0.15):Color.primary.opacity(0.06),in:Circle()).foregroundStyle(selected ? accent:Color.secondary);VStack(alignment:.leading,spacing:4){Text(MouseControls.title(button.id)).font(.subheadline.weight(.medium));Text(button.detail).font(.caption).foregroundStyle(.secondary)};Spacer()}
                 } else {
                     VStack(alignment:.leading,spacing:8){HStack{Text("\(MouseControls.number(button.id))").font(.system(size:26,weight:.semibold,design:.rounded));Spacer();if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(accent)}};Text(button.title).font(.subheadline.weight(.medium)).lineLimit(1);Text(button.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)}.frame(minHeight:80)
                 }
@@ -131,12 +155,12 @@ struct ButtonEditor:View {
             }
             Menu {
                 Button("Superwhispr · Hold Right Command"){model.rightCommandPreset()}
-                Button("LocalScribe · Hold Control–Option–Space"){model.dictationPreset()}
+                Button("LocalScribe · Hold " + model.localScribeChord.label){model.dictationPreset()}
             } label:{Label("Fill in a dictation shortcut",systemImage:"waveform")}
             if model.button.mode == .hold && model.button.chord.keys == Chord.rightCommand.keys {
                 Text("This fills in Hold Right Command. Choose Right Command as the push-to-talk key in Superwhispr, and keep Superwhispr running.").font(.caption).foregroundStyle(.secondary)
-            } else if model.button.mode == .hold && model.button.chord.keys == Chord(keyCode:49,modifiers:[.control,.option]).keys {
-                Text("This fills in Hold Control–Option–Space. LocalScribe must be running with the same dictation shortcut. This does not launch or configure LocalScribe.").font(.caption).foregroundStyle(.secondary)
+            } else if model.button.mode == .hold && model.button.chord.keys == model.localScribeChord.keys {
+                Text("Matches LocalScribe’s configured dictation shortcut (" + model.localScribeChord.label + "). Keep LocalScribe running. If you change its shortcut, fill in this preset again.").font(.caption).foregroundStyle(.secondary)
             }
             if MouseControls.extraIDs.contains(model.selectedButton),model.button.mode == .passthrough {
                 Text("This extra button has no ThumbKey action yet. In extra-button reporting mode, its firmware action may be unavailable. Choose an action above.").font(.caption).foregroundStyle(.secondary)
@@ -147,10 +171,14 @@ struct ButtonEditor:View {
                 Text("Which mouse button?").font(.subheadline.weight(.medium))
                 Text(MouseControls.location(model.selectedButton)).font(.callout).foregroundStyle(.secondary)
                 if model.button.usage==nil{Label("Needs identification before it can be mapped",systemImage:"questionmark.circle").font(.caption).foregroundStyle(.orange)}
+                if model.selectedMouse == .naga {
                 Button(model.learning==model.selectedButton ? "Press the mouse button now…":"Identify this physical button…"){model.learn()}.disabled(model.learning != nil || (MouseControls.extraIDs.contains(model.selectedButton) && !model.extraButtonsActive))
                 Text("Only needed if this slot does not respond, or responds to the wrong button. Click Identify, then press this button on the mouse. This teaches ThumbKey which input belongs here; it does not choose an action. Applies to all app profiles for this plate.").font(.caption).foregroundStyle(.secondary)
                 if MouseControls.extraIDs.contains(model.selectedButton),!model.extraButtonsActive {
                     Text("Enable extra-button reporting and mappings first.").font(.caption).foregroundStyle(.secondary)
+                }
+                } else {
+                    Text("Identified directly by the mouse. Assigning an action uses temporary Logitech button reporting; DPI and onboard settings are unchanged.").font(.caption).foregroundStyle(.secondary)
                 }
                 DisclosureGroup("Technical input details"){
                     Text(model.button.usage.map{InputSource.description($0)+" · source \($0)"} ?? "No input assigned").font(.caption.monospaced()).foregroundStyle(.secondary)
