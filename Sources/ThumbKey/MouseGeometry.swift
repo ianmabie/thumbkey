@@ -100,12 +100,26 @@ enum MouseIllustration {
                     guard let tiff=image.tiffRepresentation,let bitmap=NSBitmapImageRep(data:tiff),let png=bitmap.representation(using:.png,properties:[:]) else{continue}
                     try png.write(to:directory.appendingPathComponent("\(family.rawValue)-\(plate.rawValue)-\(angle.rawValue).png"))
                 }
+                if plate == .twelve {
+                    let name=family == .naga ? "front-right":"rear-thumb"
+                    camera.position=family == .naga ? SCNVector3(150,145,-170):SCNVector3(-150,95,165)
+                    camera.look(at:SCNVector3(-4,20,0),up:SCNVector3(0,1,0),localFront:SCNVector3(0,0,-1))
+                    camera.camera?.orthographicScale=57
+                    let renderer=SCNRenderer(device:MTLCreateSystemDefaultDevice(),options:nil);renderer.scene=scene;renderer.pointOfView=camera
+                    let image=renderer.snapshot(atTime:0,with:CGSize(width:1000,height:720),antialiasingMode:.multisampling4X)
+                    if let tiff=image.tiffRepresentation,let bitmap=NSBitmapImageRep(data:tiff),let png=bitmap.representation(using:.png,properties:[:]) {
+                        try png.write(to:directory.appendingPathComponent("\(family.rawValue)-\(plate.rawValue)-\(name).png"))
+                    }
+                }
                 let missing=expected.subtracting(visible).sorted()
                 print("\(family.rawValue) plate \(plate.rawValue): \(buttons.count) controls, missing visible hit targets: \(missing); \(String(format:"%.2f",Date().timeIntervalSince(started)))s")
                 report.append(["mouse":family.rawValue,"plate":plate.rawValue,"controlIDs":expected.sorted(),"visibleHitTargets":visible.sorted(),"missingHitTargets":missing])
             }
         }
         try JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]).write(to:directory.appendingPathComponent("model-validation.json"))
+        if report.contains(where:{!($0["missingHitTargets"] as? [Int] ?? []).isEmpty}) {
+            throw NSError(domain:"ThumbKey.ModelValidation",code:1,userInfo:[NSLocalizedDescriptionKey:"A mapped control is hidden from every preset; see model-validation.json."])
+        }
     }
 
 }
@@ -116,6 +130,7 @@ private final class MouseMeshBuilder {
     let family: MouseFamily
     let hotspots: Bool
     var buttons = [Int: SCNNode]()
+    private var conformingControls=Set<ObjectIdentifier>()
     let shellMat = material(0.19, gloss: 0.60)
     let clickMat = material(0.20, gloss: 0.58)
     let rubber = material(0.085, gloss: 0.08)
@@ -266,11 +281,18 @@ private final class MouseMeshBuilder {
         let n=normals.map { simd_length_squared($0)>0.000001 ? simd_normalize($0):SIMD3<Float>(0,1,0) }
         return SCNGeometry(sources:[SCNGeometrySource(vertices:p.map{SCNVector3($0)}),SCNGeometrySource(normals:n.map{SCNVector3($0)})],elements:[SCNGeometryElement(indices:indices,primitiveType:.triangles)])
     }
+    func undersideHeight(_ z:Float,_ sine:Float)->Float {
+        // Roll the MX heel back into the shell instead of ending the flat base
+        // in a narrow vertical fin at the last longitudinal section.
+        let t=family == .mxMaster3s ? max(0,min(1,(z-54)/9)):0
+        let floor:Float=1.8+4.2*t*t*(3-2*t)
+        return floor+(6-floor)*pow(max(0,1+sine),0.45)
+    }
     func shell() {
         let body=mesh(rows:220,columns:192) { u,v in
             let z:Float = -63+126*u, a=v*2*Float.pi, c=cos(a), sn=sin(a)
             let x=self.width(z,right:c>0)*(c<0 ? -1:1)*pow(abs(c),2/self.crownExponent)
-            let y:Float = sn>=0 ? self.top(x,z):1.8+4.2*pow(max(0,1+sn),0.45)
+            let y:Float = sn>=0 ? self.top(x,z):self.undersideHeight(z,sn)
             return SIMD3(x,y,z)
         }
         node(body,.zero,shellMat)
@@ -280,12 +302,15 @@ private final class MouseMeshBuilder {
             for i in 0...120 {
                 let a=Float(i)*2*Float.pi/120, c=cos(a), sn=sin(a)
                 let x=width(z,right:c>0)*(c<0 ? -1:1)*pow(abs(c),2/self.crownExponent)
-                let y:Float=sn>=0 ? top(x,z):1.8+4.2*pow(max(0,1+sn),0.45)
+                let y:Float=sn>=0 ? top(x,z):undersideHeight(z,sn)
                 p.append(SIMD3(x,y,z)); if i>0 {indices += z<0 ? [0,UInt32(i+1),UInt32(i)]:[0,UInt32(i),UInt32(i+1)]}
             }
             node(geometry(p,indices),.zero,shellMat)
         }
         for side: Float in [-1,1] {
+            // The MX ledge has its own continuous lower roll. A second shell
+            // seam here created disconnected black stubs in front of and behind it.
+            if family == .mxMaster3s {continue}
             let points=(0...100).map { i -> SIMD3<Float> in
                 let z:Float = -61+122*Float(i)/100
                 return SIMD3(self.sideX(6.6,z,right:side>0)*1.003,6.6,z)
@@ -502,38 +527,78 @@ private final class MouseMeshBuilder {
         let cap=box(w,h,1.25,center,Self.material(0.155,gloss:0.48),r:0.6)
         orient(cap,normal:normal,tangent:SIMD3(1,0,0));register(id,cap,number:nil)
     }
+    /// A low cap whose whole surface follows the crown, including its bevel.
+    /// The previous tangent-plane boxes pierced the curved shell at one end and
+    /// floated above it at the other, especially on the ring-finger shoulder.
+    func conformingButton(_ id:Int,_ vertices:[SIMD2<Float>],height:Float=1.2) {
+        let contour=roundedContour(vertices,radius:0.18)
+        let center=vertices.reduce(SIMD2<Float>.zero,+)/Float(vertices.count)
+        let area=contour.indices.reduce(Float(0)) { total,i in
+            let a=contour[i],b=contour[(i+1)%contour.count]
+            return total+a.x*b.y-a.y*b.x
+        }
+        // A constant-width gap avoids broad black blocks at the ends of long caps.
+        let well=contour.indices.map { i -> SIMD2<Float> in
+            let tangent=simd_normalize(contour[(i+1)%contour.count]-contour[(i+contour.count-1)%contour.count])
+            let outward=area>0 ? SIMD2(tangent.y,-tangent.x):SIMD2(-tangent.y,tangent.x)
+            return contour[i]+outward*0.22
+        }
+        patch(well,lift:0.46,material:seam)
+        // mesh() winds angular-then-radial. Counterclockwise in x/z faces upward.
+        let edge=area>0 ? contour:Array(contour.reversed())
+        let origin=SIMD3(center.x,top(center.x,center.y)+height,center.y)
+        let cap=node(mesh(rows:24,columns:edge.count){u,v in
+            let i=min(edge.count-1,Int(v*Float(edge.count))%edge.count)
+            let q=center+(edge[i]-center)*u
+            let t=max(0,min(1,(u-0.80)/0.20)),bevel=t*t*(3-2*t)
+            let lift=height-(height-0.53)*bevel+0.10*(1-u*u)
+            return SIMD3(q.x,self.top(q.x,q.y)+lift,q.y)-origin
+        },origin,Self.material(0.155,gloss:0.48))
+        conformingControls.insert(ObjectIdentifier(cap));register(id,cap,number:nil)
+    }
     func nagaExtras() {
-        topButton(13,x:-23.5,z:-50,w:6.3,h:12.0)
-        topButton(14,x:-24.5,z:-35,w:6.3,h:12.0)
-        topButton(15,x:0,z:-18,w:6.8,h:7.2)
-        topButton(16,x:0,z:-6,w:6.8,h:7.5)
-        // Ring-finger paddle is a long, low shelf beside the right paddle, not a vertical side key.
-        let x:Float=30,z:Float = -21, normal=topNormal(x,z)
-        let cap=box(7.0,24.5,1.6,SIMD3(x,top(x,z),z)+normal*0.6,Self.material(0.125,gloss:0.25),r:2.0)
-        orient(cap,normal:normal,tangent:SIMD3(1,0,0));register(17,cap,number:nil)
+        // Tapered shoulder switches beside left-click, separated by a narrow gap.
+        conformingButton(13,[SIMD2(-24.0,-57.2),SIMD2(-20.8,-58.3),SIMD2(-21.1,-44.3),SIMD2(-25.0,-43.0)])
+        conformingButton(14,[SIMD2(-25.3,-41.4),SIMD2(-21.2,-42.7),SIMD2(-21.8,-30.0),SIMD2(-26.0,-29.0)])
+        // Small, closely spaced controls in the recessed bridge behind the wheel.
+        for (id,z) in [(15,Float(-21)),(16,Float(-10))] {
+            conformingButton(id,[SIMD2(-3.3,z-3.6),SIMD2(3.3,z-3.6),SIMD2(3.3,z+3.6),SIMD2(-3.3,z+3.6)],height:1.0)
+        }
+        // An organic shoulder paddle rather than a rectangular slab on the side.
+        conformingButton(17,[SIMD2(27.3,-35),SIMD2(31.1,-32),SIMD2(32.2,-22),SIMD2(31.4,-8),SIMD2(28.0,-10)],height:1.0)
     }
     func wing(_ u:Float,_ v:Float)->SIMD3<Float> {
-        let z:Float = -30+86*u, taper=pow(max(0,sin(u*Float.pi)),0.7)
-        let height=min(section(z).z-0.5,20+12*taper)
-        // At both ends the ledge blends back into the curved body. Interpolating
-        // between two straight edges left a visibly chopped-off front corner.
-        let y=4.0+(height-4)*pow(1-v,2.8)+0.8*sin(v*Float.pi)
+        let z:Float = -39+96*u
+        // Zero-slope ends let the ledge meet the nose and heel without a notch.
+        let taper=pow(max(0,sin(u*Float.pi)),1.45)
+        let height=min(section(z).z-0.5,19+13*taper)
+        let edgeHeight:Float=6.2-1.5*taper
+        let y=edgeHeight+(height-edgeHeight)*pow(1-v,2.8)+0.5*sin(v*Float.pi)
         let x=sideX(y,z)+0.20-21*taper*v*v
         return SIMD3(x,y,z)
     }
     func mxThumbRest() {
-        let mat=Self.material(0.185,gloss:0.48);mat.isDoubleSided=true
-        let wingNode=node(mesh(rows:110,columns:70){u,v in self.wing(u,v)},.zero,mat)
+        let mat=Self.material(0.185,gloss:0.48)
+        // One continuous profile from the concave upper face, around a rolled
+        // outer lip, onto the underside. End strips are embedded in the body.
+        let wingNode=node(mesh(rows:150,columns:150){u,v in
+            if v<=0.76 {return self.wing(u,v/0.76)}
+            let outer=self.wing(u,1),taper=pow(max(0,sin(u*Float.pi)),1.45)
+            let bottom:Float=6.2-4.3*taper
+            if v<=0.88 {
+                let t=(v-0.76)/0.12
+                return SIMD3(outer.x-0.45*taper*sin(t*Float.pi),outer.y-(outer.y-bottom)*(0.5-0.5*cos(t*Float.pi)),outer.z)
+            }
+            let t=(v-0.88)/0.12,inner=self.sideX(3,outer.z)+1.0
+            return SIMD3(outer.x+(inner-outer.x)*t,bottom,outer.z)
+        },.zero,mat)
         wingNode.name="button-304"
-        var rim=[SIMD3<Float>]()
-        for i in 0...100 {var p=wing(Float(i)/100,1);p.y-=0.2;rim.append(p)}
-        tube(rim,radius:0.5,material:Self.material(0.10,gloss:0.28))
-        // Shallow sweeping ribs follow the concavity, rather than straight black stripes.
+        // Soft sweeping grooves terminate before the rolled outer lip.
         for n in 0..<9 {
             let g=mesh(rows:70,columns:5){u,v in
-                let along=0.10+Float(n)*0.078+u*0.17+(v-0.5)*0.008
-                var p=self.wing(min(0.985,along),0.12+u*0.82)
-                p.y+=0.12*sin(v*Float.pi);return p
+                let along=0.17+Float(n)*0.066+u*0.14+(v-0.5)*0.006
+                var p=self.wing(min(0.985,along),0.12+u*0.79)
+                p.y+=0.09*sin(v*Float.pi);return p
             }
             let ribMaterial=Self.material(0.17,gloss:0.40);ribMaterial.isDoubleSided=true
             node(g,.zero,ribMaterial)
@@ -587,7 +652,17 @@ private final class MouseMeshBuilder {
         box(7.1,0.8,0.8,SIMD3(0,6.8,-63.5),Self.material(0.29,gloss:0.6),r:0.3)
     }
     func underside() {
-        for z:Float in [-44,40] {box(28,1.2,9,SIMD3(0,2.4,z),rubber,r:0.55)}
+        for z:Float in [-44,40] {
+            let contour=roundedContour([SIMD2(-14,z-4.5),SIMD2(14,z-4.5),SIMD2(14,z+4.5),SIMD2(-14,z+4.5)],radius:0.22)
+            // Thin skates follow the underside instead of floating rectangular
+            // blocks that protrude past the heel in a rear three-quarter view.
+            patch(contour,lift:0.12,material:rubber,map:{p,lift in
+                let f=min(0.9999,abs(p.x)/self.width(p.y,right:p.x>0))
+                let cosine=pow(f,self.crownExponent/2)
+                let sine = -sqrt(max(0,1-cosine*cosine))
+                return SIMD3(p.x,self.undersideHeight(p.y,sine)-lift,p.y)
+            })
+        }
         let g=SCNCylinder(radius:3.7,height:0.5);g.radialSegmentCount=40
         node(g,SIMD3(0,1.3,0),seam)
     }
@@ -615,8 +690,9 @@ private final class MouseMeshBuilder {
         // Shell, patches and seams are baked in mouse space; primitives retain their native normals.
         for node in root.childNodes {
             guard let g=node.geometry else{continue}
-            if node.simdPosition == .zero, !(g is SCNText), let source=g.sources(for:.vertex).first {
-                let data=source.data
+            let isConforming=conformingControls.contains(ObjectIdentifier(node))
+            if node.simdPosition == .zero || isConforming, !(g is SCNText), let source=g.sources(for:.vertex).first {
+                let data=source.data,origin=isConforming ? node.simdPosition:SIMD3<Float>.zero
                 var vertices=[SCNVector3](),original=[SIMD3<Float>]()
                 data.withUnsafeBytes { bytes in
                     for i in 0..<source.vectorCount {
@@ -624,7 +700,7 @@ private final class MouseMeshBuilder {
                         let x=bytes.loadUnaligned(fromByteOffset:offset,as:Float.self)
                         let y=bytes.loadUnaligned(fromByteOffset:offset+4,as:Float.self)
                         let z=bytes.loadUnaligned(fromByteOffset:offset+8,as:Float.self)
-                        let p=SIMD3(x,y,z);original.append(p);vertices.append(SCNVector3(warp(p)))
+                        let p=SIMD3(x,y,z)+origin;original.append(p);vertices.append(SCNVector3(warp(p)-warp(origin)))
                     }
                 }
                 // Deforming only vertices left the old normals behind, creating false
@@ -648,6 +724,9 @@ private final class MouseMeshBuilder {
                 }
                 sources += g.sources.filter{$0.semantic != .vertex && $0.semantic != .normal}
                 let replacement=SCNGeometry(sources:sources,elements:g.elements);replacement.materials=g.materials;node.geometry=replacement
+                if isConforming {
+                    node.simdPosition=warp(origin)
+                }
             } else {node.simdPosition=warp(node.simdPosition)}
         }
     }
