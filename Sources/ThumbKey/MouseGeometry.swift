@@ -444,6 +444,8 @@ private final class MouseMeshBuilder {
         orient(cap,normal:normal,tangent:SIMD3(1,0,0));register(304,cap,number:nil)
     }
     func register(_ id:Int,_ cap:SCNNode,number:String?,depth:Float=1.5,size:Float=3.1) {
+        // Selection must never recolor another control that shares a base material.
+        if let geometry=cap.geometry {geometry.materials=geometry.materials.map{$0.copy() as! SCNMaterial}}
         cap.name="button-\(id)";buttons[id]=cap
         if let number {legend(number,on:cap,depth:depth,size:size,lit:true)}
     }

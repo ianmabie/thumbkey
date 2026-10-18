@@ -1,11 +1,12 @@
 # Prototype status
 
-Photo-referenced model refinement, version 0.3.0 build 9 (October 18, 2026):
+Photo-referenced model refinement, version 0.3.0 build 10 (October 18, 2026):
 
 - Rebuilt both original models against the additional supplied top/side/detached-panel photos. The Naga header card now follows the selected 12-/6-/2-button plate, as does the mapping model. Shared physical rows preserve mapping IDs and correct the two-button front/back placement.
 - All 28 core tests pass, including the physical plate layouts and their complete, unique mapping identities. Signed release build succeeds. Sixteen offline renders cover every mouse/plate configuration at Overview, Thumb, Top, and Right angles. Ray checks find all 17/11/7 Naga controls and all five MX controls visible from at least one preset, with no missing targets.
 - Checked shell/panel fit, concave click seams, wheel targets, thumb-rest ribs, and the Top→Right camera roll correction. Reference photos are not bundled or uploaded.
-- Final installation and native plate/click verification are pending: the Mac locked again before the existing app could be quit safely. Mappings were paused and the 12-button Naga plate was selected at the last native observation.
+- Installed the signed build at the existing app path after quitting cleanly, retaining rollback bundles. Native UI verified 12→6→2→12 updates both the header card and mapping model, preserves original button 1, and opens the correct editors when clicking six-button 3, two-button Forward, twelve-button 12, and the ring-finger cap. Top→Right remains upright.
+- Native MX checks verified direct main-wheel and thumb-rest model clicks. Fixed shared wheel material ownership so selecting the main wheel no longer highlights the horizontal wheel. Build 10 was installed and the isolated highlight verified. Both permissions remained granted; the mappings file SHA-256 was unchanged. Finished with Naga / 12-button plate / button 1 selected, Overview camera, and mappings paused as before installation. Per-device status showed Naga 100% charging over USB and MX 65% over 2.4 GHz.
 
 
 MX Master 3S and mouse cards, version 0.3.0 (October 18, 2026):
