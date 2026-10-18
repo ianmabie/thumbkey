@@ -107,8 +107,8 @@ struct MouseSceneView:NSViewRepresentable {
         }
         (view as? MouseSCNView)?.choose=onSelect
         for (id,node) in context.coordinator.buttons {
-            node.geometry?.firstMaterial?.diffuse.contents=id==selected ? NSColor.systemTeal:(context.coordinator.baseColors[id] ?? .darkGray)
-            node.geometry?.firstMaterial?.emission.contents=id==selected ? NSColor.systemTeal.withAlphaComponent(0.3):NSColor.black
+            node.geometry?.firstMaterial?.diffuse.contents=id==selected ? NSColor(red:0.07,green:0.46,blue:0.49,alpha:1):(context.coordinator.baseColors[id] ?? .darkGray)
+            node.geometry?.firstMaterial?.emission.contents=id==selected ? NSColor(red:0.01,green:0.06,blue:0.065,alpha:1):NSColor.black
             for child in node.childNodes where child.geometry is SCNText {
                 child.geometry?.firstMaterial?.diffuse.contents=id==selected ? NSColor.white:(context.coordinator.baseLegendColors[id] ?? .white)
             }

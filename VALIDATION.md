@@ -1,5 +1,12 @@
 # Prototype status
 
+Surface and lighting refinement, version 0.3.0 build 11 (October 18, 2026):
+
+- Inspected both user-provided Polycam scans locally. Kept raw captures and desk textures out of the repository. Adjusted MX crown placement and thumb-rest termination using the scan and product references; retained the Naga's correct 12-/6-/2-button layouts.
+- Corrected uneven-section curve slopes, deformation normals, and seam paths that previously cut through curved surfaces. Replaced wheel rib cylinders with grooved lathe geometry; added physically based graphite/metal, generated studio light, contact shadows, and subtler selection. Enlarged the mapping view from 300 to 390 points.
+- Signed release build succeeds. Offline previews cover all four configurations from four preset angles; ray checks verify all 17/11/7 Naga and five MX controls remain visible/selectable from a preset. No input/configuration code changed.
+- Native installation and UI verification are pending while the Mac is locked. The existing running app has not been replaced. Candidate: `work/thumbkey/ThumbKey-studio-release-build11.app` in the parent workspace.
+
 Photo-referenced model refinement, version 0.3.0 build 10 (October 18, 2026):
 
 - Rebuilt both original models against the additional supplied top/side/detached-panel photos. The Naga header card now follows the selected 12-/6-/2-button plate, as does the mapping model. Shared physical rows preserve mapping IDs and correct the two-button front/back placement.

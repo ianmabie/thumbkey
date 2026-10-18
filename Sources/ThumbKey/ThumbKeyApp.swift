@@ -87,7 +87,7 @@ struct ContentView:View {
             Divider()
             HSplitView {
                 ScrollView { VStack(alignment:.leading,spacing:18){
-                    MouseMappingScene().frame(height:300)
+                    MouseMappingScene().frame(height:390)
 
                     if model.selectedMouse == .naga {
                     Text("SIDE PLATE").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
