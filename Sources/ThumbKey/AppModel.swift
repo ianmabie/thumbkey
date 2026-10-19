@@ -3,6 +3,7 @@ import SwiftUI
 import IOKit.hid
 import UniformTypeIdentifiers
 import ThumbKeyCore
+import Carbon
 
 final class AppModel: ObservableObject {
     @Published var configuration = Configuration() { didSet { save(); updateRouting() } }
@@ -26,7 +27,8 @@ final class AppModel: ObservableObject {
         didSet {UserDefaults.standard.set(recovery.requested,forKey:"mappingsRequested")}
     }
     var wantsMappings:Bool {recovery.requested}
-    var mappingStatus:String {enabled ? "Mappings on" : wantsMappings ? (recovery.sleeping ? "Waiting for wake":"Reconnecting mappings…") : "Mappings paused"}
+    var secureInputBlocked:Bool {recovery.secureInputBlocked}
+    var mappingStatus:String {wantsMappings && secureInputBlocked ? "Blocked by Secure Input":enabled ? "Mappings on" : wantsMappings ? (recovery.sleeping ? "Waiting for wake":"Reconnecting mappings…") : "Mappings paused"}
     @Published var deviceName="No Naga connected"
     @Published var interfaceCount=0
     @Published var inputAllowed=false
@@ -35,6 +37,8 @@ final class AppModel: ObservableObject {
     @Published var saveError=""
     let capture=HIDCapture()
     let runner=ActionRunner()
+    @Published private(set) var testingShortcut=false
+    private var shortcutTestRelease:DispatchWorkItem?
     private var permissionTimer:Timer?
     private var observers:[NSObjectProtocol]=[]
     private var learnedTimeout:DispatchWorkItem?
@@ -87,7 +91,7 @@ final class AppModel: ObservableObject {
     var profile:Profile {configuration.profiles[profileIndex]}
     var button:ButtonBinding {profile.buttons.first{$0.id==selectedButton}!}
     func editButton(_ edit:(inout ButtonBinding)->Void) {
-        runner.cancelAll()
+        cancelShortcutTest();cancelLearning();runner.cancelAll()
         guard let i=configuration.profiles[profileIndex].buttons.firstIndex(where:{$0.id==selectedButton}) else{return}
         edit(&configuration.profiles[profileIndex].buttons[i])
     }
@@ -157,6 +161,14 @@ final class AppModel: ObservableObject {
         inputAllowed=IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)==kIOHIDAccessTypeGranted
         accessibilityAllowed=AXIsProcessTrusted()
         if wantsMappings && (!inputAllowed || !accessibilityAllowed){pause();message="Mappings paused. Grant Input Monitoring and Accessibility, then enable again."}
+        let wasBlocked=secureInputBlocked
+        recovery.setSecureInput(IsSecureEventInputEnabled())
+        if wantsMappings && secureInputBlocked {
+            if enabled{stopCapture()}
+            if !wasBlocked || message.isEmpty{message="macOS Secure Input is blocking mouse mappings. Close any password prompt, or lock and unlock your Mac. Mappings will resume automatically."}
+        } else if wasBlocked && wantsMappings {
+            message="Secure Input cleared. Reconnecting mappings…";scheduleRecovery()
+        }
     }
     func requestInput(){_ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent);openPrivacy("ListenEvent")}
     func requestAccessibility(){let options=[kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String:true] as CFDictionary;_ = AXIsProcessTrustedWithOptions(options);openPrivacy("Accessibility")}
@@ -169,6 +181,7 @@ final class AppModel: ObservableObject {
         guard wantsMappings,!recovery.sleeping else{return}
         recoveryWork?.cancel();recoveryWork=nil
         refreshPermissions()
+        guard !secureInputBlocked else{return}
         guard inputAllowed && accessibilityAllowed else {message="Grant both permissions first, then enable mappings.";return}
         guard interfaceCount>0 else {message="Waiting for your selected mouse. Mappings will resume when it reconnects.";return}
         guard saveError.isEmpty else {pause();message="Resolve the configuration error before enabling mappings.";return}
@@ -184,7 +197,7 @@ final class AppModel: ObservableObject {
         enabled=true;recovery.resetAttempts();refreshMouseStatus();message="Ready. Press a mouse button to check its mapping."
     }
     @discardableResult private func stopCapture()->String?{
-        recoveryWork?.cancel();recoveryWork=nil;enabled=false;cancelLearning();capture.stop();runner.cancelAll()
+        recoveryWork?.cancel();recoveryWork=nil;enabled=false;cancelShortcutTest();cancelLearning();capture.stop();runner.cancelAll()
         capture.setExtraButtonsEnabled(false);extraButtonsActive=false
         var failures=[String]()
         do{try driverMode.restore()}catch{failures.append(error.localizedDescription)}
@@ -201,7 +214,7 @@ final class AppModel: ObservableObject {
         stopCapture();message="\(reason) Held keys released. Reconnecting…";scheduleRecovery()
     }
     private func scheduleRecovery(){
-        guard wantsMappings,!recovery.sleeping,recoveryWork==nil else{return}
+        guard wantsMappings,!recovery.sleeping,!secureInputBlocked,recoveryWork==nil else{return}
         guard interfaceCount>0 else{message="Waiting for your selected mouse. Mappings will resume when it reconnects.";return}
         guard let delay=recovery.nextDelay() else{
             let detail=message;pause();message="Could not resume mappings after three attempts. Enable mappings to retry. \(detail)";return
@@ -236,7 +249,23 @@ final class AppModel: ObservableObject {
         if let binding{lastButton=binding.id;message="\(MouseControls.title(binding.id)) · \(binding.mode.label)"}
         if intercepted{runner.down(usage,binding:binding)}
     }
-    func recordChanged(_ recording:Bool){runner.cancelAll();runner.suspend=recording}
+    func recordChanged(_ recording:Bool){cancelShortcutTest();cancelLearning();runner.cancelAll();runner.suspend=recording}
+    private func cancelShortcutTest(){
+        shortcutTestRelease?.cancel();shortcutTestRelease=nil
+        if testingShortcut{runner.up(UInt32.max);testingShortcut=false}
+    }
+    func testShortcut(){
+        guard accessibilityAllowed,!button.chord.isEmpty,!testingShortcut else{return}
+        cancelLearning();runner.cancelAll();runner.suspend=false
+        let usage=UInt32.max,binding=button
+        testingShortcut=true
+        runner.down(usage,binding:binding)
+        let work=DispatchWorkItem{[weak self] in
+            self?.runner.up(usage);self?.testingShortcut=false;self?.shortcutTestRelease=nil
+        }
+        shortcutTestRelease=work
+        DispatchQueue.main.asyncAfter(deadline:.now()+3,execute:work)
+    }
     func rightCommandPreset(){editButton{$0.name="Superwhispr";$0.mode = .hold;$0.chord = .rightCommand}}
     var localScribeChord:Chord {
         struct Saved:Decodable{let keyCode:UInt32,modifiers:UInt32;let label:String}

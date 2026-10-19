@@ -1,5 +1,12 @@
 # Prototype status
 
+Secure Input recovery and shortcut diagnosis, version 0.3.0 build 21 (October 18, 2026):
+
+- Reproduced the reported original “1” output with button 1 configured as Hold Control–D and mappings enabled. A direct test through the existing ActionRunner started LocalScribe and released dictation after three seconds, isolating the receiving shortcut from physical input detection.
+- The public `IsSecureEventInputEnabled()` API returned true and macOS reported the loginwindow PID while the desktop was unlocked. Temporary, Naga-only diagnostics received no hardware or matching keyboard events during the user's button test. A lock/unlock cycle did not clear Secure Input. Apple documents that this state blocks event taps. Temporary instrumentation has been removed; no keyboard history is retained.
+- ThumbKey now displays the blocked state, stops capture and releases held keys, keeps the user's enabled intent, and resumes when Secure Input clears. Waiting does not consume reconnect attempts. Manual pause remains authoritative. Shortcut recording respects the blocked state, and editing/recording cancels physical-button identification and active shortcut tests.
+- Added a three-second shortcut test using the same ActionRunner as physical mappings. All 29 core tests pass, including Secure Input waiting/resumption/manual pause and the existing device-isolation/held-key tests. The signed release build and strict candidate-signature verification pass. Physical end-to-end confirmation remains pending until macOS clears Secure Input.
+
 Scroll behavior, version 0.3.0 build 20 (October 18, 2026):
 
 - The shared 3D viewer forwards wheel and trackpad scroll events to the surrounding page instead of SceneKit's camera controller. Drag rotation and the angle presets remain available for both mice. Removed the scroll-to-zoom hint.

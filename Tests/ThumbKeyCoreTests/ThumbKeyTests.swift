@@ -2,6 +2,19 @@ import XCTest
 @testable import ThumbKeyCore
 
 final class ThumbKeyTests:XCTestCase {
+    func testSecureInputWaitsWithoutExhaustingRetriesAndResumesUserIntent(){
+        var recovery=MappingRecovery(requested:true)
+        recovery.setSecureInput(true)
+        for _ in 0..<10{XCTAssertNil(recovery.nextDelay())}
+        XCTAssertTrue(recovery.requested)
+        recovery.sleep();recovery.wake()
+        XCTAssertNil(recovery.nextDelay())
+        recovery.setSecureInput(false)
+        XCTAssertEqual(recovery.nextDelay(),0.5)
+        recovery.setSecureInput(true);recovery.pause();recovery.setSecureInput(false)
+        XCTAssertNil(recovery.nextDelay())
+        XCTAssertFalse(recovery.requested)
+    }
     func testPhysicalPlateLayoutsKeepEveryMappingInItsPhotographedPosition() {
         XCTAssertEqual(SidePlate.twelve.visualRows, [[3,6,9,12],[2,5,8,11],[1,4,7,10]])
         XCTAssertEqual(SidePlate.six.visualRows, [[101,102,103],[106,105,104]])

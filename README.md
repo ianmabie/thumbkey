@@ -61,6 +61,10 @@ Technical input details are collapsed by default. For example, **Keyboard 1** (f
 
 The menu bar opens the editor, pauses mappings, releases held keys, or quits. Closing the window keeps ThumbKey running. Manual Pause and permission loss cancel automatic recovery. Recovery retries are bounded to three attempts; failed recovery requires enabling mappings again. Held keys have a two-minute release watchdog. Overlapping held shortcuts share modifier ownership so one button cannot release another button's key.
 
+If macOS Secure Input is active, ThumbKey shows **Blocked by Secure Input**, releases held keys and waits without spending its reconnect attempts. Keyboard-style side buttons keep their original output in this state. Close password prompts or lock and unlock the Mac; if Secure Input remains stuck, save your work and log out or restart. Mappings resume automatically when it clears, unless you manually paused them. ThumbKey does not disable Secure Input. See [Apple's explanation](https://developer.apple.com/library/archive/technotes/tn2150/_index.html).
+
+**Test shortcut** checks the selected shortcut independently of physical mouse detection. Held shortcuts are sent for three seconds and then released. For LocalScribe push-to-talk, use **Hold keys while pressed** and **Fill in a dictation shortcut → LocalScribe** to copy its current shortcut. A successful shortcut test checks delivery to the other app; it does not prove that macOS is allowing physical mouse input to be observed.
+
 ## Input isolation
 
 ThumbKey observes Naga keyboard and mouse HID interfaces nonexclusively. It filters keyboard and auxiliary mouse events only when one-use hardware timestamp evidence identifies the Naga. Left/right/middle click and pointer motion remain native. Other keyboards and mice provide transient collision evidence, not actions. Unmatched or ambiguous events pass through. Dedicated V3 Pro button report 4 is handled separately and cannot collide with ordinary keyboard usages of the same number.

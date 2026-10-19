@@ -8,13 +8,14 @@ struct ShortcutRecorder:NSViewRepresentable {
     func makeNSView(context:Context)->Recorder {
         let v=Recorder();v.changed={chord=$0};v.recordingChanged=onRecording;return v
     }
-    func updateNSView(_ v:Recorder,context:Context){v.chord=chord;v.changed={chord=$0};v.recordingChanged=onRecording;v.needsDisplay=true;v.setAccessibilityLabel("Shortcut: \(chord.label). Click to record.")}
+    func updateNSView(_ v:Recorder,context:Context){v.canRecord=context.environment.isEnabled;v.chord=chord;v.changed={chord=$0};v.recordingChanged=onRecording;v.needsDisplay=true;v.setAccessibilityLabel("Shortcut: \(chord.label). Click to record.")}
     final class Recorder:NSView {
         var chord=Chord(),recording=false,seenModifiers=Modifiers()
+        var canRecord=true {didSet{if !canRecord{finish(nil)}}}
         var seenModifierKeys=Set<UInt16>()
         var changed:((Chord)->Void)?,recordingChanged:((Bool)->Void)?
         override var acceptsFirstResponder:Bool{true}
-        override func mouseDown(with event:NSEvent){window?.makeFirstResponder(self);recording=true;seenModifiers=[];seenModifierKeys=[];recordingChanged?(true);needsDisplay=true}
+        override func mouseDown(with event:NSEvent){guard canRecord else{return};window?.makeFirstResponder(self);recording=true;seenModifiers=[];seenModifierKeys=[];recordingChanged?(true);needsDisplay=true}
         override func resignFirstResponder()->Bool{finish(nil);return super.resignFirstResponder()}
         override func draw(_ rect:NSRect){
             (recording ? NSColor.controlAccentColor.withAlphaComponent(0.1) : NSColor.controlBackgroundColor).setFill();NSBezierPath(roundedRect:bounds,xRadius:8,yRadius:8).fill()

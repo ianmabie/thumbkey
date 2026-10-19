@@ -79,7 +79,7 @@ struct ContentView:View {
                 HStack(spacing:10){ForEach(MouseFamily.allCases){family in MouseDeviceCard(family:family)}}
                 Spacer(minLength:0)
                 VStack(alignment:.trailing,spacing:10){
-                    Label(model.mappingStatus,systemImage:model.enabled ? "circle.fill":"pause.circle").foregroundStyle(model.enabled ? accent:Color.secondary).font(.caption.weight(.medium))
+                    Label(model.mappingStatus,systemImage:model.wantsMappings && model.secureInputBlocked ? "exclamationmark.triangle.fill":model.enabled ? "circle.fill":"pause.circle").foregroundStyle(model.wantsMappings && model.secureInputBlocked ? Color.orange:model.enabled ? accent:Color.secondary).font(.caption.weight(.medium))
                     HStack{Button{model.refreshMouseStatus()}label:{Image(systemName:"arrow.clockwise")}.buttonStyle(.plain).help("Refresh mouse batteries and connections")
                         Button(model.wantsMappings ? "Pause":"Enable mappings"){model.toggleEnabled()}.buttonStyle(.borderedProminent).tint(accent)}
                 }
@@ -165,6 +165,11 @@ struct ButtonEditor:View {
                 VStack(alignment:.leading,spacing:8){
                     Text(model.button.mode == .hold ? "Keys held while the button is down":"Shortcut sent once per press").font(.subheadline.weight(.medium))
                     ShortcutRecorder(chord:field(\.chord),onRecording:model.recordChanged).frame(height:40)
+                        .disabled(model.secureInputBlocked)
+                    if model.secureInputBlocked{Text("Shortcut recording is unavailable while macOS Secure Input is active. You can still use the LocalScribe preset below.").font(.caption).foregroundStyle(.orange)}
+                    Button(model.testingShortcut ? "Testing shortcut…":"Test shortcut"){model.testShortcut()}
+                        .disabled(model.testingShortcut || model.button.chord.isEmpty || !model.accessibilityAllowed)
+                    Text(model.button.mode == .hold ? "Tests these keys for three seconds, then releases them. Use this to check the receiving app without pressing the mouse button.":"Sends this shortcut once to check the receiving app.").font(.caption).foregroundStyle(.secondary)
                     Text(model.button.mode == .hold ? "Press a combination on your keyboard. For a modifier alone, press and release it. Releasing the mouse button releases the keys.":"Click the recorder, then press your shortcut on the keyboard.").font(.caption).foregroundStyle(.secondary)
                 }
             }
