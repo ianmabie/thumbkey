@@ -1,5 +1,12 @@
 # Prototype status
 
+Photo-corrected footprints, version 0.3.0 build 18 (October 18, 2026):
+
+- Used the user's two underside photos and rear three-quarter photo to replace the generic outlines: separate Naga flank profiles with the front-right step and fuller rear; an MX thumb recess and broader rear ledge. The underside contact areas are flat, with smooth perimeter rolls and matte base materials.
+- Corrected the Naga's front skate, rounded U-shaped rear skate, larger puck and vertical switches. Corrected the MX's pad sizes, colors and placement. All original button IDs and saved mappings remain unchanged.
+- Signed release and strict verification pass. All 25 final review images rendered successfully. All 17/11/7 Naga and five MX mapped buttons pass visible-hit checks. Diagnostic construction plus rendering timings: 2.58/2.38/2.39/1.21 seconds. These are photo-referenced illustrations, not CAD measurements. User photographs remain outside the repository.
+- Live installation and native verification are pending: the Mac locked while preparing the replacement. The current live app is build 17.
+
 Rounded heels and underside inspection, version 0.3.0 build 17 (October 18, 2026):
 
 - Rounded both rear crowns and rolled the underside upward into the heel instead of tapering to a point at the floor. Consistent rear curvature and denser end sampling keep the closing mesh smooth. Closed the MX upper/lower boundary exactly.

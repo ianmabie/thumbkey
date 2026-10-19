@@ -142,6 +142,7 @@ private final class MouseMeshBuilder {
     let shellMat = material(0.19, gloss: 0.60)
     let clickMat = material(0.20, gloss: 0.58)
     let rubber = material(0.085, gloss: 0.08)
+    let baseMat = material(0.12, gloss: 0.12)
     let seam = material(0.025, gloss: 0.12)
     let metal = material(0.90, gloss: 0.85)
     let green = luminous(NSColor(red: 0.28, green: 0.93, blue: 0.06, alpha: 1))
@@ -245,10 +246,33 @@ private final class MouseMeshBuilder {
         return sqrt(max(0,1-t*t))
     }
     func shoulderHeight(_ z:Float)->Float {14-8*heelRoundness(z)}
+    /// Monotone cubic profile interpolation keeps the photo-fitted outline
+    /// smooth without overshooting into a bulge between measured stations.
+    func profile(_ z:Float,_ points:[SIMD2<Float>])->Float {
+        let i=min(points.count-2,max(0,(0..<points.count-1).first{z<=points[$0+1].x} ?? points.count-2))
+        let a=points[i],b=points[i+1],h=b.x-a.x,t=max(0,min(1,(z-a.x)/h))
+        func slope(_ k:Int)->Float {
+            if k==0{return (points[1].y-points[0].y)/(points[1].x-points[0].x)}
+            if k==points.count-1{return (points[k].y-points[k-1].y)/(points[k].x-points[k-1].x)}
+            let h0=points[k].x-points[k-1].x,h1=points[k+1].x-points[k].x
+            let d0=(points[k].y-points[k-1].y)/h0,d1=(points[k+1].y-points[k].y)/h1
+            guard d0*d1>0 else{return 0}
+            return 3*(h0+h1)/((2*h1+h0)/d0+(h1+2*h0)/d1)
+        }
+        return (2*t*t*t-3*t*t+1)*a.y+(t*t*t-2*t*t+t)*h*slope(i)
+            + (-2*t*t*t+3*t*t)*b.y+(t*t*t-t*t)*h*slope(i+1)
+    }
+    let nagaLeftOutline:[SIMD2<Float>]=[.init(-63,24),.init(-58,28),.init(-49,30),.init(-41,31),.init(-30,32),.init(-12,32.5),.init(10,33),.init(28,33)]
+    let nagaRightOutline:[SIMD2<Float>]=[.init(-63,25),.init(-58,28),.init(-49,29),.init(-41,36),.init(-30,40),.init(-12,41),.init(10,40),.init(28,37.5)]
     func width(_ z: Float, right: Bool) -> Float {
-        let w=section(z).y
-        if family == .naga && right { return w + 5.5*exp(-pow((z+13)/27,2)) }
-        return w
+        if family == .naga {
+            if z>28 {
+                let t=max(0,min(1,(z-28)/35))
+                return (right ? 37.5:33)*sqrt(max(0.0000001,1-t*t))
+            }
+            return profile(z,right ? nagaRightOutline:nagaLeftOutline)
+        }
+        return section(z).y
     }
     var crownExponent:Float {family == .naga ? 3.2:2.8}
     func top(_ x: Float, _ z: Float) -> Float {
@@ -265,9 +289,9 @@ private final class MouseMeshBuilder {
         if y<base {
             // Let the MX ledge meet the rolled underside as well as the upper
             // shell; clamping to maximum width leaves a detached rear corner.
-            let floor:Float=14-12.2*rounding
+            let floor=undersideFloor(z)
             let fraction=max(0,min(1,(y-floor)/max(0.0001,base-floor)))
-            let sine=pow(fraction,1/0.45)-1
+            let sine=0.35+0.65*pow(fraction,1/1.60)-1
             return sign*w*pow(sqrt(max(0,1-sine*sine)),2/crownExponent)
         }
         if family == .naga && !right {
@@ -328,9 +352,25 @@ private final class MouseMeshBuilder {
         let n=normals.map { simd_length_squared($0)>0.000001 ? simd_normalize($0):SIMD3<Float>(0,1,0) }
         return SCNGeometry(sources:[SCNGeometrySource(vertices:p.map{SCNVector3($0)}),SCNGeometrySource(normals:n.map{SCNVector3($0)})],elements:[SCNGeometryElement(indices:indices,primitiveType:.triangles)])
     }
+    func gridMaterials(_ geometry:SCNGeometry,rows:Int,columns:Int,split:Int,upper:SCNMaterial,lower:SCNMaterial)->SCNGeometry {
+        var top=[UInt32](),bottom=[UInt32]()
+        for r in 0..<rows {for c in 0..<columns {
+            let a=UInt32(r*(columns+1)+c),b=a+1,d=a+UInt32(columns+1),e=d+1
+            if c<split {top += [a,b,d,d,b,e]}else{bottom += [a,b,d,d,b,e]}
+        }}
+        let result=SCNGeometry(sources:geometry.sources,elements:[SCNGeometryElement(indices:top,primitiveType:.triangles),SCNGeometryElement(indices:bottom,primitiveType:.triangles)])
+        result.materials=[upper,lower];return result
+    }
+    func undersideFloor(_ z:Float)->Float {
+        let t=max(0,min(1,(z-57)/6))
+        return 1.8+12.2*(1-sqrt(max(0,1-t*t)))
+    }
     func undersideHeight(_ z:Float,_ sine:Float)->Float {
-        let rounding=heelRoundness(z),floor:Float=14-12.2*rounding
-        return floor+(shoulderHeight(z)-floor)*pow(max(0,1+sine),0.45)
+        let floor=undersideFloor(z)
+        // A flat contact surface with a rolled perimeter, as in the underside
+        // photos. The old continuous bowl lifted the rear glide feet off-plane.
+        let edge=pow(max(0,(1+sine-0.35)/0.65),1.60)
+        return floor+(shoulderHeight(z)-floor)*edge
     }
     func shell() {
         let body=mesh(rows:220,columns:192) { u,v in
@@ -340,7 +380,8 @@ private final class MouseMeshBuilder {
             let y:Float = sn>=0 ? self.top(x,z):self.undersideHeight(z,sn)
             return SIMD3(x,y,z)
         }
-        node(body,.zero,shellMat)
+        let bodyNode=SCNNode(geometry:gridMaterials(body,rows:220,columns:192,split:96,upper:shellMat,lower:baseMat))
+        root.addChildNode(bodyNode)
         // Close both end faces; the low nose sits beneath separately sculpted click paddles.
         for z: Float in [-63,63] {
             var p=[SIMD3<Float>(0,shoulderHeight(z),z)], indices=[UInt32]()
@@ -664,34 +705,40 @@ private final class MouseMeshBuilder {
         let grain=Self.material(0.13,gloss:0.14);grain.isDoubleSided=true
         node(geometry(points,indices),.zero,grain)
     }
+    // The actual MX footprint has a concave neck and a broad rear ledge,
+    // not the old sinusoidal wing which made the whole mouse pear-shaped.
+    let wingExtensions:[SIMD2<Float>]=[.init(-39,0),.init(-28,0),.init(-22,0.4),.init(-16,3),.init(-8,13),.init(0,20),.init(15,25),.init(30,26),.init(42,24),.init(53,17),.init(60,6),.init(63,0)]
+    func wingTaper(_ z:Float)->Float {max(0,min(1,profile(z,wingExtensions)/26))}
+    func wingBottom(_ z:Float)->Float {
+        let floor=undersideFloor(z),taper=wingTaper(z)
+        // Collapse the roll into the side wall where the ledge disappears;
+        // elsewhere its underside shares the chassis contact plane.
+        return floor+(shoulderHeight(z)-floor)*pow(max(0,1-taper*3),3)-0.06*taper
+    }
     func wing(_ u:Float,_ v:Float)->SIMD3<Float> {
-        let z:Float = -39+96*u
-        // Zero-slope ends let the ledge meet the nose and heel without a notch.
-        let taper=pow(max(0,sin(u*Float.pi)),1.45)
-        let height=min(section(z).z-0.5,19+13*taper)
-        let edgeHeight:Float=6.0-1.5*taper
-        let y=edgeHeight+(height-edgeHeight)*pow(1-v,2.8)+0.5*sin(v*Float.pi)
-        let x=sideX(y,z)+0.20-21*taper*v*v
-        // Wide, shallow molded flutes, not dark lines laid over the rubber.
-        let envelope=pow(max(0,sin(v*Float.pi)),2)*pow(max(0,sin(u*Float.pi)),2)
+        let z:Float = -39+102*u,taper=wingTaper(z)
+        let height=min(section(z).z,shoulderHeight(z)+13+13*taper)
+        let edgeHeight=shoulderHeight(z)-1.5*taper*heelRoundness(z)
+        let y=edgeHeight+(height-edgeHeight)*pow(1-v,2.8)+0.5*sin(v*Float.pi)*taper
+        let x=sideX(y,z)+0.20-profile(z,wingExtensions)*v*v
+        let envelope=pow(max(0,sin(v*Float.pi)),2)*taper*taper
         let rib:Float=0.14*envelope*cos((u-0.18*v)*Float.pi*28)
         return SIMD3(x,y+rib,z)
     }
     func mxThumbRest() {
         let mat=Self.material(0.225,gloss:0.32)
-        // One continuous profile from the concave upper face, around a rolled
-        // outer lip, onto the underside. End strips are embedded in the body.
-        let wingNode=node(mesh(rows:150,columns:150){u,v in
+        // Close the enlarged ledge around its rolled edge and onto the chassis.
+        let wingNode=node(mesh(rows:180,columns:150){u,v in
             if v<=0.76 {return self.wing(u,v/0.76)}
-            let outer=self.wing(u,1),taper=pow(max(0,sin(u*Float.pi)),1.45)
-            let bottom:Float=6.0-4.3*taper
+            let outer=self.wing(u,1),taper=self.wingTaper(outer.z),bottom=self.wingBottom(outer.z)
             if v<=0.88 {
                 let t=(v-0.76)/0.12
                 return SIMD3(outer.x-0.45*taper*sin(t*Float.pi),outer.y-(outer.y-bottom)*(0.5-0.5*cos(t*Float.pi)),outer.z)
             }
-            let t=(v-0.88)/0.12,inner=self.sideX(3,outer.z)+1.0
+            let t=(v-0.88)/0.12,inner=self.sideX(bottom,outer.z)+1.0
             return SIMD3(outer.x+(inner-outer.x)*t,bottom,outer.z)
         },.zero,mat)
+        if let geometry=wingNode.geometry {wingNode.geometry=gridMaterials(geometry,rows:180,columns:150,split:132,upper:mat,lower:baseMat)}
         wingNode.name="button-304"
         let led=box(3.0,0.8,0.35,sidePoint(35.5,3,lift:0.6),green,r:0.17)
         orient(led,normal:sideNormal(35.5,3),tangent:SIMD3(0,0.20,1))
@@ -707,7 +754,7 @@ private final class MouseMeshBuilder {
         }
         conformingButton(305,[SIMD2(-3,-17.7),SIMD2(3,-17.7),SIMD2(3,-8.3),SIMD2(-3,-8.3)],height:0.85)
         // Entire thumb rest is the gesture press target; highlight its small embossed dash.
-        let u:Float=0.61,v:Float=0.82, p=wing(u,v)
+        let u:Float=0.64,v:Float=0.82, p=wing(u,v)
         let du=wing(u+0.001,v)-wing(u-0.001,v), dv=wing(u,v+0.001)-wing(u,v-0.001)
         var normal=simd_normalize(simd_cross(du,dv));if normal.y<0{normal = -normal}
         let cap=box(1.2,5.7,0.55,p+normal*0.35,Self.material(0.19,gloss:0.18),r:0.45)
@@ -764,9 +811,9 @@ private final class MouseMeshBuilder {
     func underside() {
         let project:(SIMD2<Float>,Float)->SIMD3<Float>={self.bottomPoint($0,$1)}
         let down=SIMD3<Float>(0,-1,0)
-        let base=Self.material(0.12,gloss:0.28),foot=Self.material(family == .naga ? 0.73:0.32,gloss:0.40)
+        let foot=Self.material(family == .naga ? 0.80:0.065,gloss:0.40)
         let lens=Self.material(0.035,gloss:0.55)
-        lens.metalness.contents=0.0;lens.roughness.contents=0.28
+        lens.metalness.contents=0.0;lens.roughness.contents=0.85
         func oval(_ x:Float,_ z:Float,_ rx:Float,_ rz:Float)->[SIMD2<Float>] {
             (0..<48).map { i in
                 let a=Float(i)*2*Float.pi/48
@@ -789,42 +836,47 @@ private final class MouseMeshBuilder {
             n.scale=SCNVector3(size,size,size)
         }
         if family == .naga {
-            // Molded base insert, broad front skate and a crescent around the puck.
-            plate(roundedContour([SIMD2(-22,-56),SIMD2(22,-56),SIMD2(29,-15),SIMD2(29,24),SIMD2(21,47),SIMD2(0,55),SIMD2(-23,45),SIMD2(-29,15),SIMD2(-27,-22)],radius:0.12),0.10,base)
-            plate(roundedContour([SIMD2(-20,-53),SIMD2(20,-53),SIMD2(23,-39),SIMD2(20,-29),SIMD2(-20,-29),SIMD2(-23,-39)],radius:0.22),0.32,foot)
-            let rearFoot=roundedContour([SIMD2(-24,25),SIMD2(-19,40),SIMD2(-10,49),SIMD2(0,52),SIMD2(10,49),SIMD2(19,40),SIMD2(24,25),SIMD2(17,27),SIMD2(12,37),SIMD2(0,42),SIMD2(-12,37),SIMD2(-17,27)],radius:0.16)
+            // Fit the broad asymmetric front foot and circular rear foot to
+            // the user's underside photo, preserving the larger right shoulder.
+            plate(roundedContour([SIMD2(-26,-53),SIMD2(-12,-56),SIMD2(12,-56),SIMD2(24,-52),SIMD2(26,-44),SIMD2(32,-33),SIMD2(-28,-33)],radius:0.18),0.32,foot)
+            var rearFoot=[SIMD2<Float>]()
+            for i in 0...48 {let a=Float(i)*Float.pi/48;rearFoot.append(SIMD2(28*cos(a),29+28*sin(a)))}
+            for i in 1...16 {let a=Float.pi+Float(i)*Float.pi/16;rearFoot.append(SIMD2(-24+4*cos(a),29+4*sin(a)))}
+            for i in 1...48 {let a=Float.pi-Float(i)*Float.pi/48;rearFoot.append(SIMD2(20*cos(a),29+20*sin(a)))}
+            for i in 1..<16 {let a=Float.pi+Float(i)*Float.pi/16;rearFoot.append(SIMD2(24+4*cos(a),29+4*sin(a)))}
             plate(rearFoot,0.34,foot)
-            plate(oval(0,25,16.8,16.8),0.22,seam)
-            plate(oval(0,25,15.7,15.7),0.30,Self.material(0.16,gloss:0.25))
-            // Two subtle opposing latch notches on the removable charging puck.
-            for x:Float in [-14,14] {plate(rect(x,25,1.2,5),0.35,seam)}
-            plate(oval(0,-3,7.0,7.0),0.35,foot)
-            plate(oval(0,-3,5.5,5.5),0.40,seam)
-            plate(rect(0,-3,4.5,5.4),0.46,lens)
-            // Ring-finger lock, wireless mode slider, and profile selector.
-            plate(rect(15,-21,7.2,3.8),0.27,seam)
-            plate(rect(13.5,-21,3.4,3.0),0.44,Self.material(0.24,gloss:0.35))
-            plate(rect(15,-5,4.8,11),0.27,seam)
-            plate(rect(15,-7.3,3.6,4.3),0.44,Self.material(0.24,gloss:0.35))
-            plate(oval(-14,-5,3.5,3.5),0.27,seam)
-            plate(oval(-14,-5,2.7,2.7),0.43,Self.material(0.23,gloss:0.32))
-            plate(oval(-14,-12,0.75,0.75),0.45,green)
-            label("NAGA V3 PRO",0,-23,2.2)
-            label("PROFILE",-14,1.7,1.45)
+            plate(oval(0,29,19.2,19.2),0.22,seam)
+            plate(oval(0,29,18.3,18.3),0.30,Self.material(0.16,gloss:0.25))
+            for x:Float in [-14,14] {plate(oval(x,28,0.30,0.30),0.36,Self.material(0.32,gloss:0.20))}
+            plate(oval(0,-3,7.7,7.7),0.35,foot)
+            plate(oval(0,-3,4.6,4.6),0.40,seam)
+            plate(oval(0,-3,2.6,3.1),0.46,lens)
+            // Photo locations: vertical ring-finger lock at the outer shoulder,
+            // wireless slider beside the sensor and elongated profile button.
+            plate(rect(28,-25,6.6,9.4),0.27,seam)
+            plate(oval(28,-26.8,2.3,2.3),0.44,Self.material(0.24,gloss:0.35))
+            plate(rect(13,-3,6.3,10.5),0.27,seam)
+            plate(oval(13,-5.3,2.2,2.2),0.44,Self.material(0.24,gloss:0.35))
+            plate(rect(-13,-3,6.5,10.6),0.27,seam)
+            plate(rect(-13,-3,4.8,8.0),0.43,Self.material(0.23,gloss:0.32))
+            plate(oval(-13,-13,0.75,0.75),0.45,green)
+            label("NAGA V3 PRO",0,-25,2.6)
+            label("PROFILE",-13,4.8,1.45)
+            label("BT",13,-11,1.3);label("2.4",13,5.5,1.3)
         } else {
-            plate(rect(0,1,21,92),0.13,seam)
-            plate(rect(0,1,19.5,90),0.20,Self.material(0.105,gloss:0.20))
+            plate(rect(0,1,25,94),0.13,seam)
+            plate(rect(0,1,23.5,92),0.20,Self.material(0.105,gloss:0.20))
             // Four low-friction pads: nose, heel, body flank and thumb ledge.
-            plate(roundedContour([SIMD2(-16,-52),SIMD2(16,-52),SIMD2(18,-45),SIMD2(14,-36),SIMD2(-14,-36),SIMD2(-18,-45)],radius:0.25),0.33,foot)
-            plate(roundedContour([SIMD2(-17,36),SIMD2(17,36),SIMD2(17,43),SIMD2(10,51),SIMD2(0,54),SIMD2(-10,51),SIMD2(-17,43)],radius:0.24),0.33,foot)
-            plate(roundedContour([SIMD2(25,-5),SIMD2(29,-3),SIMD2(28,23),SIMD2(23,36),SIMD2(20,34),SIMD2(24,19)],radius:0.18),0.31,foot)
+            plate(roundedContour([SIMD2(-11,-54),SIMD2(11,-54),SIMD2(12,-48),SIMD2(9,-43),SIMD2(-9,-43),SIMD2(-12,-48)],radius:0.30),0.33,foot)
+            plate(roundedContour([SIMD2(-12,43),SIMD2(12,43),SIMD2(12,49),SIMD2(8,55),SIMD2(0,57),SIMD2(-8,55),SIMD2(-12,49)],radius:0.30),0.33,foot)
+            plate(roundedContour([SIMD2(22,-10),SIMD2(27,-8),SIMD2(26,29),SIMD2(22,40),SIMD2(19,38),SIMD2(21,20)],radius:0.18),0.31,foot)
             // Map the fourth skate directly onto the thumb-rest underside.
             let wingMap:(SIMD2<Float>,Float)->SIMD3<Float>={p,lift in
-                let u=(p.y+39)/96,outer=self.wing(u,1),taper=pow(max(0,sin(u*Float.pi)),1.45)
-                let inner=self.sideX(3,p.y)+1
-                return SIMD3(inner+(outer.x-inner)*p.x,6-4.3*taper-lift,p.y)
+                let u=(p.y+39)/102,outer=self.wing(u,1),bottom=self.wingBottom(p.y)
+                let inner=self.sideX(bottom,p.y)+1
+                return SIMD3(inner+(outer.x-inner)*p.x,bottom-lift,p.y)
             }
-            patch(roundedContour([SIMD2(0.66,-1),SIMD2(0.87,-1),SIMD2(0.87,33),SIMD2(0.66,33)],radius:0.18),lift:0.32,material:foot,map:wingMap,outward:down)
+            patch(roundedContour([SIMD2(0.64,-5),SIMD2(0.90,-5),SIMD2(0.90,39),SIMD2(0.64,39)],radius:0.18),lift:0.32,material:foot,map:wingMap,outward:down)
             // Power slot, glass sensor and Easy-Switch button with three channels.
             plate(rect(0,-24,4.7,10),0.28,Self.material(0.24,gloss:0.35))
             plate(rect(0,-24,3.7,8.8),0.34,seam)
@@ -859,7 +911,8 @@ private final class MouseMeshBuilder {
         func warp(_ p:SIMD3<Float>)->SIMD3<Float> {
             let blend=pow(max(0,min(1,(-p.z-40)/23)),3),f=p.x/30
             let shift=blend*(7*f*f+(family == .mxMaster3s ? 3.8*f:0))
-            return SIMD3(p.x,p.y,p.z+shift)
+            let rear=max(0,min(1,(p.z-20)/43)),rearOffset:Float=family == .mxMaster3s ? -5*rear*rear*(3-2*rear):0
+            return SIMD3(p.x+rearOffset,p.y,p.z+shift)
         }
         // Shell, patches and seams are baked in mouse space; primitives retain their native normals.
         for node in root.childNodes {
