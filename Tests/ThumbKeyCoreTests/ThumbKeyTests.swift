@@ -2,6 +2,19 @@ import XCTest
 @testable import ThumbKeyCore
 
 final class ThumbKeyTests:XCTestCase {
+    func testNewSelectionAndPauseInvalidatePendingHardwareWork(){
+        let requests=RequestGeneration()
+        let naga=requests.next(),logitech=requests.next()
+        XCTAssertFalse(requests.matches(naga))
+        XCTAssertTrue(requests.matches(logitech))
+        let paused=requests.next()
+        XCTAssertFalse(requests.matches(logitech))
+        XCTAssertTrue(requests.matches(paused))
+        // A completion for an earlier mouse must stay invalid even after switching back.
+        _=requests.next()
+        XCTAssertFalse(requests.matches(naga))
+        XCTAssertFalse(requests.matches(paused))
+    }
     func testSecureInputWaitsWithoutExhaustingRetriesAndResumesUserIntent(){
         var recovery=MappingRecovery(requested:true)
         recovery.setSecureInput(true)

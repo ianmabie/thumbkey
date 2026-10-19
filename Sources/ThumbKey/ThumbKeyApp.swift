@@ -85,6 +85,17 @@ struct ContentView:View {
                 }
             }.padding(.horizontal,24).padding(.vertical,16)
             Divider()
+            if model.noMouseDetected {
+                HStack(spacing:12){
+                    Image(systemName:"computermouse").font(.title2).foregroundStyle(.secondary)
+                    VStack(alignment:.leading,spacing:3){
+                        Text("No supported mouse detected").font(.headline)
+                        Text("Connect your Naga V3 Pro or MX Master 3S by cable, receiver, or Bluetooth. You can still edit saved mappings.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }.padding(.horizontal,24).padding(.vertical,12).background(Color.secondary.opacity(0.06))
+                Divider()
+            }
             if !model.inputAllowed || !model.accessibilityAllowed {
                 HStack(alignment:.center,spacing:16){Image(systemName:"hand.raised").font(.title2);VStack(alignment:.leading,spacing:4){Text("Allow ThumbKey to remap your side pad").font(.headline);Text("Input Monitoring reads mouse buttons. Accessibility sends your chosen shortcuts.").font(.caption).foregroundStyle(.secondary)};Spacer();Button(model.inputAllowed ? "Input Monitoring ✓":"Allow Input Monitoring"){model.requestInput()}.disabled(model.inputAllowed);Button(model.accessibilityAllowed ? "Accessibility ✓":"Allow Accessibility"){model.requestAccessibility()}.disabled(model.accessibilityAllowed)}.padding(16).background(accent.opacity(0.06));Divider()
             }

@@ -1,5 +1,13 @@
 # Prototype status
 
+Responsive mouse selection and wireless fallback, version 0.3.0 build 22 (October 19, 2026):
+
+- Moved blocking mouse control, battery queries, and restoration to one serial hardware queue. Selection updates immediately while connection attempts run in the background. Full 3D scenes build off the UI thread, cache by mouse/plate, and warm the other mouse in advance. Cached scenes retain their original button materials for correct selection highlights.
+- Connection requests use generation checks so stale completions cannot reconnect a previous selection or override Pause. An asleep/unreachable mouse keeps mapping intent enabled while waiting; switching back reconnects the available mouse. Refresh retries when the selected mouse answers.
+- Native diagnosis found mappings had paused because optional Naga extra-button mode was rejected over the receiver. Failure of that optional mode now leaves standard side-panel mappings on. Verified the real receiver rejection with extra-button reporting enabled and the UI remaining **Mappings on** with a warning. Switching to the asleep MX displays **Waiting for mouse…**; switching back to Naga restores **Mappings on** automatically. Existing Control–D hold on side button 1 remains saved. A fresh physical dictation test is still awaiting the user; LocalScribe's window could not be inspected through native automation during this pass.
+- Cards distinguish confirmed connection, receiver-only detection, and no device. Unknown battery rows are hidden; unsupported Naga receiver battery polling is skipped. Disconnected cards are dimmed with dashed borders, remain selectable for editing, and a no-device banner appears when neither device/receiver is present. Rendered and inspected production cards in all three states, including known MX battery alongside hidden unknown Naga battery.
+- All 30 core tests pass, including stale request cancellation, input isolation, held keys and Secure Input recovery. Signed release and strict installed signature verification pass. Installed/reopened build 22 at the existing app path with rollback retained. Saved mappings are byte-for-byte unchanged. Left Naga / 12-button plate / button 1 / Everywhere selected with mapping intent enabled and the original extra-button preference restored.
+
 Secure Input recovery and shortcut diagnosis, version 0.3.0 build 21 (October 18, 2026):
 
 - Reproduced the reported original “1” output with button 1 configured as Hold Control–D and mappings enabled. A direct test through the existing ActionRunner started LocalScribe and released dictation after three seconds, isolating the receiving shortcut from physical input detection.

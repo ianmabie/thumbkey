@@ -67,6 +67,10 @@ If macOS Secure Input is active, ThumbKey shows **Blocked by Secure Input**, rel
 
 ## Input isolation
 
+Mouse selection uses cached 3D scenes and performs connection/battery requests in the background. Cards distinguish **Connected**, **Receiver detected** (the receiver is present but the mouse has not yet been confirmed awake), and **Not detected**. Disconnected mice remain selectable for editing saved mappings. Battery is shown only when an actual percentage is available; Naga receiver battery queries are currently unsupported and hidden. If an asleep mouse does not answer, wake it and use Refresh, or select another mouse; this does not turn off your mapping preference.
+
+If optional Naga extra-button reporting fails, the standard side-panel mappings continue working. The app explains that the extra controls are unavailable rather than pausing every button. Bluetooth/receiver support for those extra controls is still limited as described above.
+
 ThumbKey observes Naga keyboard and mouse HID interfaces nonexclusively. It filters keyboard and auxiliary mouse events only when one-use hardware timestamp evidence identifies the Naga. Left/right/middle click and pointer motion remain native. Other keyboards and mice provide transient collision evidence, not actions. Unmatched or ambiguous events pass through. Dedicated V3 Pro button report 4 is handled separately and cannot collide with ordinary keyboard usages of the same number.
 
 No keyboard history is saved. A bounded in-memory queue holds timing evidence and clears when mapping stops. Candidate events can wait up to 12 ms for HID/collision checks. This is conservative correlation, not a system-provided device identity for every event. Other remappers may conflict. Consumer/media controls and wheel tilt remapping are outside this version. No scripts, shell execution, root helper, or private entitlement are included.

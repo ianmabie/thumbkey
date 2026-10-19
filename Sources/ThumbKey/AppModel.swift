@@ -13,13 +13,15 @@ final class AppModel: ObservableObject {
     @Published private(set) var battery=MousePower(percent:nil,charging:nil)
     @Published private(set) var connection=MouseConnection.unknown
     @Published private(set) var mouseStatuses=[MouseFamily:MouseStatus]()
-    private let logitech=LogitechController()
+    private let hardware=MouseHardware()
+    @Published private(set) var connecting=false
+    private var checkingExtraButtons=false
+    private var lastNagaActivity=Date.distantPast
     private var batteryTimer:Timer?
     @Published private(set) var sidePlate=SidePlate(rawValue:UserDefaults.standard.integer(forKey:"sidePlate")) ?? .twelve
     @Published private(set) var extraButtonsEnabled=UserDefaults.standard.bool(forKey:"extraButtonsEnabled")
     @Published private(set) var extraButtonsActive=false
     @Published private(set) var lastPlateSignal="No plate identity signal received"
-    private let driverMode=NagaDriverMode()
     @Published var learning: Int?
     @Published var lastButton: Int?
     @Published var enabled=false
@@ -28,7 +30,7 @@ final class AppModel: ObservableObject {
     }
     var wantsMappings:Bool {recovery.requested}
     var secureInputBlocked:Bool {recovery.secureInputBlocked}
-    var mappingStatus:String {wantsMappings && secureInputBlocked ? "Blocked by Secure Input":enabled ? "Mappings on" : wantsMappings ? (recovery.sleeping ? "Waiting for wake":"Reconnecting mappings…") : "Mappings paused"}
+    var mappingStatus:String {wantsMappings && secureInputBlocked ? "Blocked by Secure Input":enabled ? "Mappings on" : wantsMappings ? (recovery.sleeping ? "Waiting for wake":connecting ? "Connecting mappings…":"Waiting for mouse…") : "Mappings paused"}
     @Published var deviceName="No Naga connected"
     @Published var interfaceCount=0
     @Published var inputAllowed=false
@@ -65,13 +67,13 @@ final class AppModel: ObservableObject {
         } catch { saveError="Could not read saved mappings. They have not been overwritten: \(error.localizedDescription)" }
         selectedProfile=configuration.profiles[0].id;selectedButton=selectedMouse == .naga ? sidePlate.buttonIDs[0]:301
         loaded=saveError.isEmpty
-        capture.onDevices={ [weak self] devices in self?.updateDevices(devices) }
-        logitech.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted) }
+        capture.onDevices={ [weak self] devices in self?.updateDevices(devices);self?.refreshMouseStatus() }
+        hardware.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted) }
         capture.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted) }
         capture.onDisconnect={ [weak self] reason in self?.interrupted(reason) }
         capture.onError={ [weak self] text in self?.message=text }
         capture.onPlateSignal={ [weak self] signal in self?.lastPlateSignal=signal }
-        capture.onActivity={ [weak self] in self?.checkExtraButtonMode() }
+        capture.onActivity={ [weak self] in self?.noteNagaActivity();self?.checkExtraButtonMode() }
         runner.status={ [weak self] text in self?.message=text }
         updateDevices(capture.deviceList); refreshPermissions();updateRouting()
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didActivateApplicationNotification,object:nil,queue:.main){[weak self] _ in self?.updateRouting()})
@@ -106,29 +108,41 @@ final class AppModel: ObservableObject {
     func selectMouse(_ family:MouseFamily){
         guard family != selectedMouse else{return}
         let resume=wantsMappings
-        if let error=stopCapture(){recovery.pause();message=error;return}
+        stopCapture()
         selectedMouse=family
         UserDefaults.standard.set(family.rawValue,forKey:"selectedMouse")
         selectedButton=family == .naga ? sidePlate.buttonIDs[0]:301;lastButton=nil
         updateDevices(capture.deviceList);updateRouting()
-        if resume{attemptStart()};refreshMouseStatus()
+        if resume{attemptStart()}
     }
     func status(for family:MouseFamily)->MouseStatus {mouseStatuses[family] ?? MouseStatus()}
-    func refreshMouseStatus(){
+    private var detectedConnections:[MouseFamily:MouseConnection] {
+        var result=[MouseFamily:MouseConnection]()
         for family in MouseFamily.allCases {
-            let devices=capture.deviceList.filter{$0.matches(family)}
-            guard let device=devices.first else{mouseStatuses[family]=MouseStatus();continue}
-            var status=MouseStatus(connected:true,connection:MouseConnection.resolve(vendor:HIDCapture.number(device.device,kIOHIDVendorIDKey),product:device.productID,transport:device.transport))
-            if family == .naga{status.power=MouseTelemetry.nagaPower()}
-            else {
-                let temporary = !logitech.isConnected
-                do {try logitech.connect();status.power=logitech.power();status.connection=logitech.connection}
-                catch {status.power = .init(percent:nil,charging:nil)}
-                if temporary {try? logitech.stop()}
+            if let device=capture.deviceList.first(where:{$0.matches(family)}){
+                result[family]=MouseConnection.resolve(vendor:HIDCapture.number(device.device,kIOHIDVendorIDKey),product:device.productID,transport:device.transport)
             }
-            mouseStatuses[family]=status
         }
-        let current=status(for:selectedMouse);battery=current.power;connection=current.connection
+        return result
+    }
+    var noMouseDetected:Bool {MouseFamily.allCases.allSatisfy{status(for:$0).presence == .notDetected}}
+    func refreshMouseStatus(){
+        let connections=detectedConnections
+        hardware.refreshStatus(connections){[weak self] statuses in
+            guard let self else{return}
+            var updated=statuses
+            if Date().timeIntervalSince(self.lastNagaActivity)<120,connections[.naga] != nil{updated[.naga]?.presence = .connected}
+            self.mouseStatuses=updated;self.updateSelectedStatus()
+            if self.wantsMappings && !self.enabled && !self.connecting && self.status(for:self.selectedMouse).connected {
+                self.recovery.resetAttempts();self.scheduleRecovery()
+            }
+        }
+    }
+    private func updateSelectedStatus(){let current=status(for:selectedMouse);battery=current.power;connection=current.connection}
+    private func noteNagaActivity(){
+        guard detectedConnections[.naga] != nil else{return}
+        lastNagaActivity=Date()
+        if mouseStatuses[.naga]?.presence != .connected{mouseStatuses[.naga]?.presence = .connected}
     }
     func selectPlate(_ plate:SidePlate){
         runner.cancelAll();cancelLearning();sidePlate=plate
@@ -138,24 +152,42 @@ final class AppModel: ObservableObject {
     }
     func setExtraButtons(_ value:Bool){
         let resume=wantsMappings
-        if let error=stopCapture(){recovery.pause();message="Mappings paused. \(error) Reconnect the mouse before enabling again.";return}
+        stopCapture()
         extraButtonsEnabled=value;UserDefaults.standard.set(value,forKey:"extraButtonsEnabled")
         if resume{attemptStart()}
     }
     private func checkExtraButtonMode(){
-        guard enabled,extraButtonsActive else{return}
-        do{if try driverMode.ensure(){
-            runner.cancelAll()
-            guard capture.start() else{pause();message="Could not restart input observation after mouse idle.";return}
-            message="Extra-button reporting restored after mouse idle."
-        }}
-        catch{pause();message="Extra-button connection lost: \(error.localizedDescription)"}
+        guard enabled,extraButtonsActive,!checkingExtraButtons else{return}
+        checkingExtraButtons=true
+        hardware.checkExtraButtons{[weak self] result in
+            guard let self else{return};self.checkingExtraButtons=false
+            switch result {
+            case .success(let restored):
+                if restored {
+                    self.runner.cancelAll()
+                    guard self.capture.start() else{self.pause();self.message="Could not restart input observation after mouse idle.";return}
+                    self.message="Extra-button reporting restored after mouse idle."
+                }
+            case .failure(let error):
+                self.runner.cancelAll()
+                self.extraButtonsActive=false;self.capture.setExtraButtonsEnabled(false)
+                self.message="Side-panel mappings are on. Extra-button connection lost: \(error.localizedDescription)"
+            }
+        }
     }
     private func updateDevices(_ devices:[NagaInterface]) {
+        let connections=detectedConnections
+        for family in MouseFamily.allCases {
+            guard let connection=connections[family] else{mouseStatuses[family]=MouseStatus();continue}
+            if mouseStatuses[family]?.connection != connection || mouseStatuses[family]?.presence == .notDetected{
+                mouseStatuses[family]=MouseStatus(presence:connection == .wireless ? .receiver:.connected,connection:connection)
+            }
+        }
+        updateSelectedStatus()
         let matching=devices.filter{$0.matches(selectedMouse)}
         interfaceCount=matching.count
         if let first=matching.first {deviceName="\(selectedMouse.name) · \(MouseConnection.resolve(vendor:HIDCapture.number(first.device,kIOHIDVendorIDKey),product:first.productID,transport:first.transport).rawValue)"} else {deviceName="\(selectedMouse.name) · Not connected"}
-        if wantsMappings && !enabled {recovery.resetAttempts();scheduleRecovery()}
+        if wantsMappings && !enabled && !connecting {recovery.resetAttempts();scheduleRecovery()}
     }
     func refreshPermissions() {
         inputAllowed=IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)==kIOHIDAccessTypeGranted
@@ -164,7 +196,7 @@ final class AppModel: ObservableObject {
         let wasBlocked=secureInputBlocked
         recovery.setSecureInput(IsSecureEventInputEnabled())
         if wantsMappings && secureInputBlocked {
-            if enabled{stopCapture()}
+            if enabled || connecting{stopCapture()}
             if !wasBlocked || message.isEmpty{message="macOS Secure Input is blocking mouse mappings. Close any password prompt, or lock and unlock your Mac. Mappings will resume automatically."}
         } else if wasBlocked && wantsMappings {
             message="Secure Input cleared. Reconnecting mappings…";scheduleRecovery()
@@ -178,7 +210,7 @@ final class AppModel: ObservableObject {
         recovery.enable();attemptStart()
     }
     private func attemptStart() {
-        guard wantsMappings,!recovery.sleeping else{return}
+        guard wantsMappings,!recovery.sleeping,!connecting else{return}
         recoveryWork?.cancel();recoveryWork=nil
         refreshPermissions()
         guard !secureInputBlocked else{return}
@@ -187,34 +219,41 @@ final class AppModel: ObservableObject {
         guard saveError.isEmpty else {pause();message="Resolve the configuration error before enabling mappings.";return}
         message="";updateRouting();let started=capture.start()
         guard started && capture.capturedCount==interfaceCount else {capture.stop();runner.cancelAll();enabled=false;scheduleRecovery();return}
-        if selectedMouse == .mxMaster3s {
-            do {try logitech.connect();try logitech.configure(configuration.profile(for:NSWorkspace.shared.frontmostApplication?.bundleIdentifier).buttons(for:selectedMouse,plate:sidePlate),learning:false)}
-            catch {pause();message=error.localizedDescription;return}
-        } else if extraButtonsEnabled {
-            do {try driverMode.activate();extraButtonsActive=true;capture.setExtraButtonsEnabled(true)}
-            catch {pause();message="Could not enable extra buttons: \(error.localizedDescription)";return}
+        connecting=true
+        let family=selectedMouse
+        let buttons=configuration.profile(for:NSWorkspace.shared.frontmostApplication?.bundleIdentifier).buttons(for:family,plate:sidePlate)
+        hardware.prepare(family:family,extraButtons:extraButtonsEnabled,buttons:buttons){[weak self] result in
+            guard let self else{return};self.connecting=false
+            switch result {
+            case .success(let (extraActive,warning)):
+                self.extraButtonsActive=extraActive;self.capture.setExtraButtonsEnabled(extraActive)
+                self.enabled=true;self.recovery.resetAttempts()
+                if family == .mxMaster3s{self.mouseStatuses[family]?.presence = .connected}
+                self.updateRouting()
+                self.message=warning ?? "Ready. Press a mouse button to check its mapping."
+            case .failure(let error):
+                // An asleep/offline mouse must not turn off the user's mapping intent
+                // for the next mouse they select. Refresh retries after it answers.
+                self.stopCapture();self.message="Waiting for \(family.name). \(error.localizedDescription) Wake it and press Refresh to reconnect."
+            }
         }
-        enabled=true;recovery.resetAttempts();refreshMouseStatus();message="Ready. Press a mouse button to check its mapping."
     }
-    @discardableResult private func stopCapture()->String?{
-        recoveryWork?.cancel();recoveryWork=nil;enabled=false;cancelShortcutTest();cancelLearning();capture.stop();runner.cancelAll()
+    private func stopCapture(){
+        recoveryWork?.cancel();recoveryWork=nil;enabled=false;connecting=false;checkingExtraButtons=false
+        cancelShortcutTest();cancelLearning();capture.stop();runner.cancelAll()
         capture.setExtraButtonsEnabled(false);extraButtonsActive=false
-        var failures=[String]()
-        do{try driverMode.restore()}catch{failures.append(error.localizedDescription)}
-        do{try logitech.stop()}catch{failures.append(error.localizedDescription)}
-        return failures.isEmpty ? nil:failures.joined(separator:" ")
+        hardware.stop{[weak self] failure in
+            guard let self,let failure else{return}
+            self.recovery.pause();self.message="Mappings paused. \(failure) Reconnect the mouse before enabling again."
+        }
     }
-    func pause(){
-        recovery.pause()
-        if let error=stopCapture(){message="Mappings paused. \(error) Reconnect the mouse to restore normal behavior."}
-        else{message="Mappings paused. Side buttons send their original keys."}
-    }
-    func shutdown(){stopCapture()}
+    func pause(){recovery.pause();stopCapture();message="Mappings paused. Side buttons send their original keys."}
+    func shutdown(){stopCapture();hardware.finishStopping()}
     private func interrupted(_ reason:String){
         stopCapture();message="\(reason) Held keys released. Reconnecting…";scheduleRecovery()
     }
     private func scheduleRecovery(){
-        guard wantsMappings,!recovery.sleeping,!secureInputBlocked,recoveryWork==nil else{return}
+        guard wantsMappings,!recovery.sleeping,!secureInputBlocked,!connecting,recoveryWork==nil else{return}
         guard interfaceCount>0 else{message="Waiting for your selected mouse. Mappings will resume when it reconnects.";return}
         guard let delay=recovery.nextDelay() else{
             let detail=message;pause();message="Could not resume mappings after three attempts. Enable mappings to retry. \(detail)";return
@@ -232,12 +271,13 @@ final class AppModel: ObservableObject {
     private func updateRouting(){
         let buttons=configuration.profile(for:NSWorkspace.shared.frontmostApplication?.bundleIdentifier).buttons(for:selectedMouse,plate:sidePlate)
         capture.setFamily(selectedMouse);capture.setBindings(buttons,learning:selectedMouse == .naga && learning != nil)
-        if selectedMouse == .mxMaster3s,enabled,logitech.isConnected {
-            do{try logitech.configure(buttons,learning:learning != nil)}catch{pause();message=error.localizedDescription}
+        if selectedMouse == .mxMaster3s,enabled {
+            hardware.configure(buttons,learning:learning != nil){[weak self] error in self?.pause();self?.message=error}
         }
     }
     private func received(usage:UInt32,down:Bool,binding:ButtonBinding?,intercepted:Bool) {
         if !down {runner.up(usage);if intercepted,let binding{message="\(MouseControls.title(binding.id)) released."};return}
+        guard enabled else{return}
         if let target=learning {
             runner.cancelAll()
             do {
