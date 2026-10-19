@@ -46,7 +46,7 @@ struct MouseMappingScene:View {
             Picker("View angle",selection:$angle){ForEach(MouseViewAngle.allCases){angle in Text(angle.title).tag(angle)}}.pickerStyle(.segmented)
             MouseSceneView(family:model.selectedMouse,plate:model.sidePlate,selected:model.selectedButton,interactive:true,angle:angle,onSelect:model.select).id(resetID)
                 .accessibilityLabel("Rotatable 3D mouse illustration. Use the button list below to select a mapping with the keyboard.")
-            HStack(spacing:5){Text("Drag to rotate · scroll to zoom");Spacer();Text("3D illustration").help("Built-in illustration with approximate button positions, not a manufacturer scan.")}.font(.system(size:10)).foregroundStyle(.secondary)
+            HStack(spacing:5){Text("Drag to rotate");Spacer();Text("3D illustration").help("Built-in illustration with approximate button positions, not a manufacturer scan.")}.font(.system(size:10)).foregroundStyle(.secondary)
             HStack(spacing:6){Circle().fill(.teal).frame(width:6,height:6);Text(MouseControls.title(model.selectedButton)).fontWeight(.medium);Text("·");Text(model.button.detail).lineLimit(1);Spacer()}.font(.caption)
         }.padding(14).background(Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:14))
     }
@@ -54,6 +54,10 @@ struct MouseMappingScene:View {
 
 private final class MouseSCNView:SCNView {
     var choose:((Int)->Void)?
+    override func scrollWheel(with event:NSEvent){
+        // Let the surrounding page scroll without changing the model's camera.
+        nextResponder?.scrollWheel(with:event)
+    }
     override func mouseDown(with event:NSEvent){
         let point=convert(event.locationInWindow,from:nil)
         for hit in hitTest(point,options:[.searchMode:SCNHitTestSearchMode.closest.rawValue]) {

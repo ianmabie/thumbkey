@@ -1,5 +1,11 @@
 # Prototype status
 
+Scroll behavior, version 0.3.0 build 20 (October 18, 2026):
+
+- The shared 3D viewer forwards wheel and trackpad scroll events to the surrounding page instead of SceneKit's camera controller. Drag rotation and the angle presets remain available for both mice. Removed the scroll-to-zoom hint.
+- Signed release build, strict installed-signature verification, and diff whitespace check pass. Installed and relaunched at the existing app path with build 19 retained as rollback. Saved mappings were unchanged at installation.
+- Native inspection confirms the updated hint, page scrolling over the Naga viewer, and camera reset. Further isolated gesture checks were stopped when the user began interacting with the app; their subsequent mapping edits were left intact. This update does not change geometry or input routing.
+
 Final multi-angle photo pass, version 0.3.0 build 19 (October 18, 2026):
 
 - Reviewed six additional user photos locally. Rebuilt the MX front as a continuous shallow slope with broader click paddles, a slimmer wheel bridge, molded button lips, and a recessed lower nose. Subdivided the curved front closure and kept its upper/lower boundary joined so low views do not reveal cracks or fan-triangle creases.
