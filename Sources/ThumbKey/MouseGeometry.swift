@@ -106,7 +106,7 @@ enum MouseIllustration {
                     try png.write(to:directory.appendingPathComponent("\(family.rawValue)-\(plate.rawValue)-\(angle.rawValue).png"))
                 }
                 if plate == .twelve {
-                    var inspectionViews:[(String,SCNVector3)]=[("rear-thumb",SCNVector3(-150,95,165)),("bottom-oblique",SCNVector3(145,-135,150))]
+                    var inspectionViews:[(String,SCNVector3)]=[("rear-thumb",SCNVector3(-150,95,165)),("bottom-oblique",SCNVector3(145,-135,150)),("front-low",SCNVector3(-4,65,-230)),("thumb-low",SCNVector3(-230,38,-45)),("rear-low",SCNVector3(-100,55,220))]
                     if family == .naga {inspectionViews.append(("front-right",SCNVector3(150,145,-170)))}
                     for (name,position) in inspectionViews {
                         camera.position=position
@@ -200,8 +200,10 @@ private final class MouseMeshBuilder {
                     .init(41,29,35), .init(56,20,21), .init(63,0.5,6.1)]
         }
         // The user's scan places the MX crown farther forward than our first illustration.
-        return [.init(-63,23,11), .init(-59,26,21), .init(-44,27,32),
-                .init(-24,28,41), .init(-3,30,49), .init(12,32,51), .init(20,32,49),
+        // The front photographs show a continuous shallow ramp into the paddles,
+        // not a short, steep dome above a vertical nose.
+        return [.init(-63,25,11.8), .init(-56,26.5,16.5), .init(-44,27,27),
+                .init(-24,28,40), .init(-3,30,49), .init(12,32,51), .init(20,32,49),
                 .init(42,29,34), .init(56,20,18), .init(63,0.5,6.1)]
     }()
     func section(_ z: Float) -> SIMD3<Float> {
@@ -234,10 +236,10 @@ private final class MouseMeshBuilder {
         let crownStart:Float=family == .naga ? 20:12
         if z>=crownStart {
             let t=max(0,min(1,(z-crownStart)/(63-crownStart)))
-            let radius:Float=family == .naga ? 29:37
-            // The rear ends halfway up the shell, with an elliptical rollover,
-            // rather than bringing the crown down to a sharp point at the floor.
-            result.z=14+radius*sqrt(max(0,1-t*t))
+            let radius:Float=family == .naga ? 37:45
+            // The ellipse meets the low chassis rim with a vertical tangent.
+            // Raising its pole halfway up the body made the base curl upward.
+            result.z=6+radius*sqrt(max(0,1-t*t))
         }
         return result
     }
@@ -245,7 +247,7 @@ private final class MouseMeshBuilder {
         let t=max(0,min(1,(z-44)/19))
         return sqrt(max(0,1-t*t))
     }
-    func shoulderHeight(_ z:Float)->Float {14-8*heelRoundness(z)}
+    func shoulderHeight(_ z:Float)->Float {6}
     /// Monotone cubic profile interpolation keeps the photo-fitted outline
     /// smooth without overshooting into a bulge between measured stations.
     func profile(_ z:Float,_ points:[SIMD2<Float>])->Float {
@@ -275,10 +277,15 @@ private final class MouseMeshBuilder {
         return section(z).y
     }
     var crownExponent:Float {family == .naga ? 3.2:2.8}
+    func upperExponent(_ z:Float)->Float {
+        // Broad click paddles across the front, blending into the rounded palm.
+        let t=max(0,min(1,(-z-20)/35))
+        return crownExponent+(family == .mxMaster3s ? 1.7:0.55)*t*t*(3-2*t)
+    }
     func top(_ x: Float, _ z: Float) -> Float {
         let s=section(z), w=width(z,right:x>0), f=min(1,abs(x)/max(0.001,w))
         let base=shoulderHeight(z),rounding=heelRoundness(z)
-        let h: Float = base+(s.z-base)*pow(max(0,1-pow(f,crownExponent)),0.52)
+        let h: Float = base+(s.z-base)*pow(max(0,1-pow(f,upperExponent(z))),0.52)
         if family == .mxMaster3s { return h - 4*x/max(1,w)*pow(max(0,1-f),0.28)*rounding }
         // A soft depression lets the ring finger sit alongside right-click.
         return h - (x>0 ? 3*exp(-pow((z+20)/25,2))*pow(f,2)*rounding:0)
@@ -296,7 +303,7 @@ private final class MouseMeshBuilder {
         }
         if family == .naga && !right {
             let fraction=max(0,min(0.9999,(y-base)/max(0.0001,section.z-base)))
-            return -w*pow(max(0,1-pow(fraction,1/0.52)),1/crownExponent)
+            return -w*pow(max(0,1-pow(fraction,1/0.52)),1/upperExponent(z))
         }
         var lo:Float=0,hi:Float=0.9999
         let depression:Float=family == .naga && right ? 3*exp(-pow((z+20)/25,2))*rounding:0
@@ -304,7 +311,7 @@ private final class MouseMeshBuilder {
         // coarser rounding creates visible speckling on the side-wheel housing.
         for _ in 0..<18 {
             let f=(lo+hi)/2
-            var h:Float=base+(section.z-base)*pow(max(0,1-pow(f,crownExponent)),0.52)
+            var h:Float=base+(section.z-base)*pow(max(0,1-pow(f,upperExponent(z))),0.52)
             if family == .mxMaster3s {h -= 4*sign*f*pow(max(0,1-f),0.28)*rounding}
             else if right {h -= depression*f*f}
             if h>y {lo=f}else{hi=f}
@@ -362,8 +369,8 @@ private final class MouseMeshBuilder {
         result.materials=[upper,lower];return result
     }
     func undersideFloor(_ z:Float)->Float {
-        let t=max(0,min(1,(z-57)/6))
-        return 1.8+12.2*(1-sqrt(max(0,1-t*t)))
+        let t=max(0,min(1,(z-59)/4))
+        return 1.8+4.2*(1-sqrt(max(0,1-t*t)))
     }
     func undersideHeight(_ z:Float,_ sine:Float)->Float {
         let floor=undersideFloor(z)
@@ -372,33 +379,44 @@ private final class MouseMeshBuilder {
         let edge=pow(max(0,(1+sine-0.35)/0.65),1.60)
         return floor+(shoulderHeight(z)-floor)*edge
     }
+    func shellTop(_ x:Float,_ z:Float)->Float {
+        let t=max(0,min(1,(-z-43)/20))
+        // Recess the chassis below the independent front click caps. This also
+        // leaves a real shadow gap at the nose, visible from the low side angle.
+        let height=top(x,z),base=shoulderHeight(z)
+        let crownFraction=max(0,min(1,(height-base)/max(0.001,section(z).z-base)))
+        return height-(family == .mxMaster3s ? 1.65:1.05)*t*t*(3-2*t)*crownFraction
+    }
     func shell() {
         let body=mesh(rows:220,columns:192) { u,v in
             // Cosine spacing keeps the tight rear rollover smooth in profile.
             let z:Float = -63+63*(1-cos(u*Float.pi)), a=v*2*Float.pi, c=cos(a), sn=sin(a)
             let x=self.width(z,right:c>0)*(c<0 ? -1:1)*pow(abs(c),2/self.crownExponent)
-            let y:Float = sn>=0 ? self.top(x,z):self.undersideHeight(z,sn)
+            let y:Float = sn>=0 ? self.shellTop(x,z):self.undersideHeight(z,sn)
             return SIMD3(x,y,z)
         }
         let bodyNode=SCNNode(geometry:gridMaterials(body,rows:220,columns:192,split:96,upper:shellMat,lower:baseMat))
         root.addChildNode(bodyNode)
         // Close both end faces; the low nose sits beneath separately sculpted click paddles.
         for z: Float in [-63,63] {
-            var p=[SIMD3<Float>(0,shoulderHeight(z),z)], indices=[UInt32]()
-            for i in 0...120 {
-                let a=Float(i)*2*Float.pi/120, c=cos(a), sn=sin(a)
-                let x=width(z,right:c>0)*(c<0 ? -1:1)*pow(abs(c),2/self.crownExponent)
-                let y:Float=sn>=0 ? top(x,z):undersideHeight(z,sn)
-                p.append(SIMD3(x,y,z)); if i>0 {indices += z<0 ? [0,UInt32(i+1),UInt32(i)]:[0,UInt32(i),UInt32(i+1)]}
+            // Subdivide the closure before the nose warp. A single triangle fan
+            // cannot follow its curved/recessed face and made long dark creases.
+            let face=mesh(rows:32,columns:192){u,v in
+                let a=(z<0 ? 1:-1)*v*2*Float.pi,c=cos(a),sn=sin(a)
+                let x=self.width(z,right:c>0)*(c<0 ? -1:1)*pow(abs(c),2/self.crownExponent)
+                let y:Float=sn>=0 ? self.shellTop(x,z):self.undersideHeight(z,sn)
+                return SIMD3(x*u,self.shoulderHeight(z)+(y-self.shoulderHeight(z))*u,z)
             }
-            node(geometry(p,indices),.zero,shellMat)
+            let normal=SCNVector3(0,0,z<0 ? -1:1)
+            let normals=SCNGeometrySource(normals:Array(repeating:normal,count:face.sources(for:.vertex)[0].vectorCount))
+            node(SCNGeometry(sources:face.sources.filter{$0.semantic != .normal}+[normals],elements:face.elements),.zero,shellMat)
         }
         for side: Float in [-1,1] {
             // The MX ledge has its own continuous lower roll. A second shell
             // seam here created disconnected black stubs in front of and behind it.
             if family == .mxMaster3s {continue}
             let points=(0...100).map { i -> SIMD3<Float> in
-                let z:Float = -61+122*Float(i)/100
+                let z:Float = -61+62*(1-cos(Float(i)*Float.pi/100))
                 let y=self.shoulderHeight(z)+0.6
                 return SIMD3(self.sideX(y,z,right:side>0)*1.003,y,z)
             }
@@ -482,8 +500,10 @@ private final class MouseMeshBuilder {
             let outline: [SIMD2<Float>]
             if family == .mxMaster3s {
                 // Long angular paddles flank a wide, integral wheel bridge (as in the top reference).
-                outline=[SIMD2(side*0.55,-62.7),SIMD2(side*23,-62.0),SIMD2(side*26,-41),
-                         SIMD2(side*27,-14),SIMD2(side*10,-19),SIMD2(side*8,-47),SIMD2(side*0.55,-48)]
+                outline=[SIMD2(side*0.45,-63.6),SIMD2(side*22.8,-63.0),
+                         SIMD2(side*25.0,-58),SIMD2(side*26,-41),
+                         SIMD2(side*26.3,-14),SIMD2(side*8.1,-19),
+                         SIMD2(side*7.0,-49.6),SIMD2(side*0.45,-50.4)]
             } else {
                 let outer: Float=side<0 ? 20.5:28
                 outline=[SIMD2(side*5.9,-62.7),SIMD2(side*23.3,-62.0),SIMD2(side*outer,-41),
@@ -491,6 +511,22 @@ private final class MouseMeshBuilder {
             }
             let contour=roundedContour(outline,radius:0.07)
             patch(contour,lift:0.42,material:clickMat)
+            let underside:(SIMD2<Float>,Float)->SIMD3<Float>={p,_ in
+                let t=max(0,min(1,(-p.y-40)/20))
+                return SIMD3(p.x,self.top(p.x,p.y)+0.26-0.95*t*t*(3-2*t),p.y)
+            }
+            patch(contour,lift:0,material:rubber,map:underside,outward:SIMD3(0,-1,0))
+            // Give the front cap a rounded thickness instead of a paper-thin
+            // decal on the chassis. The back edge settles flush into the shell.
+            let edge=seamContour(contour)
+            let edgeMaterial=clickMat.copy() as! SCNMaterial;edgeMaterial.isDoubleSided=true
+            node(mesh(rows:edge.count-1,columns:8){u,v in
+                let q=edge[min(edge.count-1,Int((u*Float(edge.count-1)).rounded()))]
+                let nose=max(0,min(1,(-q.y-40)/20))
+                let thickness:Float=0.16+0.95*nose*nose*(3-2*nose)
+                let inset:Float=0.13*sin(v*Float.pi)
+                return SIMD3(q.x*(1-inset/25),self.top(q.x,q.y)+0.42-thickness*v,q.y+inset)
+            },.zero,edgeMaterial)
             let line=seamContour(contour).map{SIMD3($0.x,top($0.x,$0.y)+0.30,$0.y)}
             tube(line,radius:0.16,material:seam)
         }
@@ -572,10 +608,14 @@ private final class MouseMeshBuilder {
     }
     func nagaPlate(_ plate: SidePlate) {
         // A conforming removable panel: its edge is a seam on the shell, not an extruded slab.
-        let contour=roundedContour([SIMD2(-43,7),SIMD2(46,7),SIMD2(49,17),SIMD2(38,30),
-                                   SIMD2(21,37),SIMD2(-5,34),SIMD2(-25,24)],radius:0.13)
+        // The removable plate occupies the whole left flank. Its upper seam
+        // rises above the keypad and sweeps down around the heel in the photos.
+        let contour=roundedContour([SIMD2(-60,6.7),SIMD2(40,6.7),SIMD2(54,6.7),
+                                   SIMD2(59,7.2),SIMD2(55,13),SIMD2(43,24),
+                                   SIMD2(28,34),SIMD2(13,39),SIMD2(-4,37),
+                                   SIMD2(-27,30),SIMD2(-46,22.8),SIMD2(-60,14.5)],radius:0.25)
         let project:(SIMD2<Float>,Float)->SIMD3<Float>={p,lift in self.sidePoint(p.y,p.x,lift:lift)}
-        patch(contour,lift:0.33,material:Self.material(0.125,gloss:0.20),map:project)
+        patch(contour,lift:0.33,material:Self.material(0.165,gloss:0.32),map:project)
         let edge=seamContour(contour).map{sidePoint($0.y,$0.x,lift:0.40)};tube(edge,radius:0.18,material:seam)
         if plate != .twelve { thumbGrip() }
         for (row,ids) in plate.visualRows.enumerated() {
@@ -585,7 +625,7 @@ private final class MouseMeshBuilder {
                 case .twelve:
                     z = -10+Float(col)*11.6 + Float(row)*0.8
                     y = 29-Float(row)*9.0 + (col==1 || col==2 ? 1.1:0)
-                    w=10.0;h=7.8
+                    w=9.5;h=8.35
                 case .six:
                     z = -10+Float(col)*13.4 + (row==1 ? 0.7:0)
                     y = 29.5-Float(row)*8.0 + (col==1 ? 1.8:0)
@@ -908,9 +948,15 @@ private final class MouseMeshBuilder {
     }
     func finishSilhouette() {
         // The front edge is rounded in plan and the MX right paddle ends behind the left.
+        let noseHeight=section(-63).z
         func warp(_ p:SIMD3<Float>)->SIMD3<Float> {
             let blend=pow(max(0,min(1,(-p.z-40)/23)),3),f=p.x/30
-            let shift=blend*(7*f*f+(family == .mxMaster3s ? 3.8*f:0))
+            let planCurve=family == .mxMaster3s ? 3.6*f*f+2.4*f:5.5*f*f
+            // The lower nose recedes beneath the click paddles. Keeping every
+            // vertex on one vertical plane produced the blunt oval front face.
+            let below=max(0,min(1,(noseHeight-p.y-0.6)/max(1,noseHeight-2)))
+            let setback=(family == .mxMaster3s ? 4.4:2.0)*below
+            let shift=blend*(planCurve+setback)
             let rear=max(0,min(1,(p.z-20)/43)),rearOffset:Float=family == .mxMaster3s ? -5*rear*rear*(3-2*rear):0
             return SIMD3(p.x+rearOffset,p.y,p.z+shift)
         }

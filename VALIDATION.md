@@ -1,5 +1,13 @@
 # Prototype status
 
+Final multi-angle photo pass, version 0.3.0 build 19 (October 18, 2026):
+
+- Reviewed six additional user photos locally. Rebuilt the MX front as a continuous shallow slope with broader click paddles, a slimmer wheel bridge, molded button lips, and a recessed lower nose. Subdivided the curved front closure and kept its upper/lower boundary joined so low views do not reveal cracks or fan-triangle creases.
+- Lowered both rear rim profiles while preserving the rounded elliptical backs and flat underside contact areas. Extended the Naga plate seam across the left flank and around the heel, and adjusted the twelve-button cap proportions. Existing mapping IDs and the 12-/6-/2-button layouts are retained.
+- Signed release build and strict installed-signature verification pass. Thirty-one rendered views include new low front, thumb-side, and rear angles. All 17/11/7 Naga controls and five MX controls pass the visible-hit checks. Diagnostic construction plus rendering times were 4.26/3.94/3.89/1.09 seconds, including the extra views.
+- Installed and relaunched build 19 at the existing app path, retaining build 18 as rollback. Native inspection confirmed both updated models and a direct thumb-rest click selected its editor. Restored MX / Thumb gesture button / Overview / Everywhere with mappings paused as before. The saved mappings SHA-256 is unchanged. Input and permission code are unchanged; these checks cover model rendering and selection, not physical input delivery.
+- Personal reference photos remain outside the repository and application. These original photo-referenced models are illustrations rather than measured CAD replicas.
+
 Photo-corrected footprints, version 0.3.0 build 18 (October 18, 2026):
 
 - Used the user's two underside photos and rear three-quarter photo to replace the generic outlines: separate Naga flank profiles with the front-right step and fuller rear; an MX thumb recess and broader rear ledge. The underside contact areas are flat, with smooth perimeter rolls and matte base materials.
