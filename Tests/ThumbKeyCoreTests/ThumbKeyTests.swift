@@ -2,6 +2,41 @@ import XCTest
 @testable import ThumbKeyCore
 
 final class ThumbKeyTests:XCTestCase {
+    func testNamedMacActionsOverrideStaleKeysAndPreserveCustomShortcut()throws{
+        let expected:[(ActionMode,UInt16,Modifiers,String)] = [
+            (.missionControl,126,.control,"Mission Control"),(.appExpose,125,.control,"App Exposé"),
+            (.showDesktop,103,[],"Show Desktop"),(.previousDesktop,123,.control,"Previous Desktop"),(.nextDesktop,124,.control,"Next Desktop")
+        ]
+        let custom=Chord(keyCode:2,modifiers:.control,keyLabel:"D")
+        var config=Configuration()
+        for (index,preset) in expected.enumerated(){
+            let (mode,key,modifiers,label)=preset
+            var button=config.profiles[0].buttons[index]
+            button.chord=custom;button.mode=mode
+            XCTAssertEqual(button.effectiveChord.keyCode,key)
+            XCTAssertEqual(button.effectiveChord.modifiers,modifiers)
+            XCTAssertEqual(button.title,label);XCTAssertEqual(button.detail,label)
+            button.name="My custom name"
+            XCTAssertEqual(button.title,"My custom name")
+            button.mode = .hold
+            XCTAssertEqual(button.effectiveChord,custom)
+            button.mode=mode
+            config.profiles[0].buttons[index]=button
+        }
+        let decoded=try JSONDecoder().decode(Configuration.self,from:JSONEncoder().encode(config)).validated()
+        XCTAssertEqual(decoded,config)
+    }
+    func testExistingMappingsDecodeWithoutAnyPresetOrShortcutChange()throws{
+        let original=Configuration()
+        let data=try JSONEncoder().encode(original)
+        let decoded=try JSONDecoder().decode(Configuration.self,from:data).validated()
+        XCTAssertEqual(decoded,original)
+        for profile in decoded.profiles {for button in profile.buttons {
+            XCTAssertNil(button.mode.presetChord)
+            XCTAssertEqual(button.effectiveChord,button.chord)
+        }}
+        XCTAssertEqual(Set(ActionMode.customActions+ActionMode.macOSActions),Set(ActionMode.allCases))
+    }
     func testNewSelectionAndPauseInvalidatePendingHardwareWork(){
         let requests=RequestGeneration()
         let naga=requests.next(),logitech=requests.next()

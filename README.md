@@ -18,6 +18,8 @@ Select a mouse using its 3D card beside the title. Each card shows battery level
 
 Click the key recorder and press a combination on your regular keyboard. For a modifier alone, press and release it. **Right Command** and **Left Command** are distinguished when recorded alone. Combinations recorded with a regular key use the usual modifier family (for example, Command–C).
 
+The **Action** menu also includes named **macOS actions**: Mission Control (Control–↑), App Exposé (Control–↓), Show Desktop (F11), Previous Desktop (Control–←), and Next Desktop (Control–→). These send the standard shortcut once per press, show the action name in the mapping view, and provide a test button without recording any keys. Existing custom names and saved shortcuts are preserved. The corresponding shortcut must be enabled in System Settings → Keyboard → Keyboard Shortcuts → Mission Control. If you customized those system keys, use **Press a shortcut once** with your chosen combination instead.
+
 **Fill in a dictation shortcut** offers two presets. These fill in keys; they do not launch or configure the other app:
 
 - **Superwhispr**: hold Right Command. Select Right Command as the push-to-talk key in Superwhispr too.

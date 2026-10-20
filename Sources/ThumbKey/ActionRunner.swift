@@ -45,7 +45,7 @@ final class ActionRunner {
             else {status?("This original key cannot be forwarded. Assign it a hotkey instead.")}
         case .hold:
             let owner=UUID();held[usage]=owner;press(b.chord,owner:owner)
-        case .shortcut:tap(b.chord)
+        case .shortcut,.missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop:tap(b.effectiveChord)
         case .macro:
             let pid=NSWorkspace.shared.frontmostApplication?.processIdentifier
             let generation=UUID();lifetimes[usage]=generation

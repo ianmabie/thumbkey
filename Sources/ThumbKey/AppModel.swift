@@ -295,7 +295,7 @@ final class AppModel: ObservableObject {
         if testingShortcut{runner.up(UInt32.max);testingShortcut=false}
     }
     func testShortcut(){
-        guard accessibilityAllowed,!button.chord.isEmpty,!testingShortcut else{return}
+        guard accessibilityAllowed,!button.effectiveChord.isEmpty,!testingShortcut else{return}
         cancelLearning();runner.cancelAll();runner.suspend=false
         let usage=UInt32.max,binding=button
         testingShortcut=true

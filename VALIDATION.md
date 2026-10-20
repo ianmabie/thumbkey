@@ -1,5 +1,13 @@
 # Prototype status
 
+Named macOS actions, version 0.3.0 build 23 (October 19, 2026):
+
+- Added Mission Control, App Exposé, Show Desktop, Previous Desktop, and Next Desktop directly to the Action menu under macOS actions. Named assignments appear in button tiles and the 3D selection legend. The editor shows the standard keys, an explanation, and a test button without requiring shortcut recording.
+- Presets send a single shortcut through the existing ActionRunner. Their effective keys override any previously saved custom chord without destroying it; switching back restores the custom chord. Existing names and other assignments are preserved. These presets use standard system shortcuts, which must be enabled and unchanged in macOS; customized keys can still be assigned with Press a shortcut once.
+- All 32 core tests pass, including preset persistence, correct effective keys despite stale custom chords, preserved custom names/shortcuts, and existing mapping decoding. Signed release build and strict installed-signature verification pass.
+- Installed/relaunched at the existing app path with build 22 retained for rollback. Native inspection verified all five menu choices, corresponding mapping names, key displays, and test controls. A temporary local listen-only observer confirmed that the installed app's five test actions emit the intended key-down/key-up pairs (126/125/103/123/124), with Control held/released correctly for the four arrow shortcuts. Ordinary input was not logged; the observer is outside the repository. This verifies generated keys, not each physical mouse button or the resulting macOS animation.
+- Restored the unassigned button used for tests and compared the full saved configuration with the pre-install snapshot: unchanged. Left Naga / 12-button plate / button 1 selected with Hold Control–D and mappings on.
+
 Responsive mouse selection and wireless fallback, version 0.3.0 build 22 (October 19, 2026):
 
 - Moved blocking mouse control, battery queries, and restoration to one serial hardware queue. Selection updates immediately while connection attempts run in the background. Full 3D scenes build off the UI thread, cache by mouse/plate, and warm the other mouse in advance. Cached scenes retain their original button materials for correct selection highlights.
