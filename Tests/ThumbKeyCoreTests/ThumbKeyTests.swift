@@ -2,6 +2,47 @@ import XCTest
 @testable import ThumbKeyCore
 
 final class ThumbKeyTests:XCTestCase {
+    func testMacPresetFlagsMatchCapturedPhysicalArrowEvent() {
+        // Real Control–Up on the user's keyboard: flags 10748161. Compare the
+        // standard modifier/navigation bits, excluding device-dependent bits.
+        let symbolicMask:UInt64=(1<<17)|(1<<18)|(1<<19)|(1<<20)|(1<<21)|(1<<23)
+        let physical:UInt64=10_748_161
+        for mode in [ActionMode.missionControl,.appExpose,.previousDesktop,.nextDesktop] {
+            let flags=ModifierKey.flags(physical:0,pressed:Set(mode.presetChord!.keys)) | mode.presetKeyFlags
+            XCTAssertEqual(flags & symbolicMask,physical & symbolicMask)
+        }
+        XCTAssertEqual(ActionMode.showDesktop.presetKeyFlags,1<<23)
+        for mode in ActionMode.customActions {XCTAssertEqual(mode.presetKeyFlags,0)}
+    }
+    func testReceiverTimingObservedInFailedButtonPresses() {
+        // Captured HID→session gaps for buttons 2 and 3 exceeded the former 2 ms window.
+        for (usage,code) in [(UInt32(31),UInt16(19)),(32,20)] {
+            for delay:UInt64 in [594_959,2_848_459,4_374_833,6_120_625] {
+                var correlation=InputCorrelation()
+                let stamp:UInt64=1_000_000_000
+                correlation.record(.init(usage:usage,down:true,timestamp:stamp,naga:true,device:1))
+                XCTAssertEqual(correlation.consume(keyCode:code,down:true,timestamp:stamp+delay),.naga(usage))
+                XCTAssertEqual(correlation.consume(keyCode:code,down:true,timestamp:stamp+delay),.missing)
+                correlation.record(.init(usage:usage,down:false,timestamp:stamp+100_000_000,naga:true,device:1))
+                XCTAssertEqual(correlation.consume(keyCode:code,down:false,timestamp:stamp+100_000_000+delay),.naga(usage))
+                XCTAssertFalse(correlation.nagaHeld(keyCode:code))
+            }
+        }
+    }
+    func testReceiverWindowStillRejectsKeyboardCollisionsAndStaleMouseEvidence() {
+        var correlation=InputCorrelation()
+        let stamp:UInt64=1_000_000_000
+        correlation.record(.init(usage:31,down:true,timestamp:stamp,naga:true,device:1))
+        correlation.record(.init(usage:31,down:true,timestamp:stamp+5_000_000,naga:false,device:2))
+        XCTAssertEqual(correlation.consume(keyCode:19,down:true,timestamp:stamp+6_000_000),.ambiguous)
+        XCTAssertEqual(correlation.consume(keyCode:19,down:true,timestamp:stamp+6_000_000),.missing)
+        correlation.reset()
+        correlation.record(.init(usage:32,down:true,timestamp:stamp,naga:true,device:1))
+        XCTAssertEqual(correlation.consume(keyCode:20,down:true,timestamp:stamp+9_000_000),.missing)
+        correlation.reset()
+        correlation.record(.init(usage:31,down:true,timestamp:stamp,naga:false,device:2))
+        XCTAssertEqual(correlation.consume(keyCode:19,down:true,timestamp:stamp+6_000_000),.otherKeyboard)
+    }
     func testNamedMacActionsOverrideStaleKeysAndPreserveCustomShortcut()throws{
         let expected:[(ActionMode,UInt16,Modifiers,String)] = [
             (.missionControl,126,.control,"Mission Control"),(.appExpose,125,.control,"App Exposé"),

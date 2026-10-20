@@ -50,22 +50,33 @@ struct MouseDeviceCard:View {
 
 struct MouseMappingScene:View {
     @EnvironmentObject var model:AppModel
-    @State private var resetID=UUID()
+    @State private var cameraRequest=UUID()
+    @State private var manuallyRotated=false
     @State private var angle=MouseViewAngle.overview
     var body:some View {
         VStack(spacing:8){
-            HStack{Text(model.selectedMouse == .naga ? "BUTTON MAP · \(model.sidePlate.rawValue)-BUTTON PLATE":"BUTTON MAP").font(.caption.weight(.semibold)).foregroundStyle(.secondary);Spacer();Button{resetID=UUID()}label:{Image(systemName:"arrow.counterclockwise")}.buttonStyle(.plain).help("Reset 3D view")}
-            Picker("View angle",selection:$angle){ForEach(MouseViewAngle.allCases){angle in Text(angle.title).tag(angle)}}.pickerStyle(.segmented)
-            MouseSceneView(family:model.selectedMouse,plate:model.sidePlate,selected:model.selectedButton,interactive:true,angle:angle,onSelect:model.select).id(resetID)
+            HStack{Text(model.selectedMouse == .naga ? "BUTTON MAP · \(model.sidePlate.rawValue)-BUTTON PLATE":"BUTTON MAP").font(.caption.weight(.semibold)).foregroundStyle(.secondary);Spacer();Button{angle = .overview;manuallyRotated=false;cameraRequest=UUID()}label:{Image(systemName:"arrow.counterclockwise")}.buttonStyle(.plain).help("Reset 3D view")}
+            HStack(spacing:2){ForEach(MouseViewAngle.allCases){preset in
+                Button{angle=preset;manuallyRotated=false;cameraRequest=UUID()}label:{
+                    Text(preset.title).font(.caption).frame(maxWidth:.infinity).padding(.vertical,5)
+                        .background(!manuallyRotated && angle==preset ? Color(nsColor:.controlBackgroundColor):Color.clear,in:RoundedRectangle(cornerRadius:5))
+                }.buttonStyle(.plain).accessibilityLabel(preset.title)
+                    .accessibilityAddTraits(!manuallyRotated && angle==preset ? .isSelected:[])
+            }}.padding(3).background(Color.primary.opacity(0.06),in:RoundedRectangle(cornerRadius:8))
+            MouseSceneView(family:model.selectedMouse,plate:model.sidePlate,selected:model.selectedButton,interactive:true,angle:angle,cameraRequest:cameraRequest,onRotate:{manuallyRotated=true},onSelect:model.select)
                 .accessibilityLabel("Rotatable 3D mouse illustration. Use the button list below to select a mapping with the keyboard.")
             HStack(spacing:5){Text("Drag to rotate");Spacer();Text("3D illustration").help("Built-in illustration with approximate button positions, not a manufacturer scan.")}.font(.system(size:10)).foregroundStyle(.secondary)
             HStack(spacing:6){Circle().fill(.teal).frame(width:6,height:6);Text(MouseControls.title(model.selectedButton)).fontWeight(.medium);Text("·");Text(model.button.detail).lineLimit(1);Spacer()}.font(.caption)
         }.padding(14).background(Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:14))
+            .onChange(of:model.selectedMouse){_,_ in manuallyRotated=false;cameraRequest=UUID()}
+            .onChange(of:model.sidePlate){_,_ in manuallyRotated=false;cameraRequest=UUID()}
     }
 }
 
 private final class MouseSCNView:SCNView {
     var choose:((Int)->Void)?
+    var onRotate:(()->Void)?
+    override func mouseDragged(with event:NSEvent){onRotate?();super.mouseDragged(with:event)}
     let loading=NSProgressIndicator()
     override func scrollWheel(with event:NSEvent){
         // Let the surrounding page scroll without changing the model's camera.
@@ -90,6 +101,8 @@ struct MouseSceneView:NSViewRepresentable {
     let selected:Int?
     let interactive:Bool
     var angle=MouseViewAngle.overview
+    let cameraRequest:UUID
+    let onRotate:()->Void
     let onSelect:(Int)->Void
     final class Coordinator {
         struct Asset {
@@ -107,9 +120,10 @@ struct MouseSceneView:NSViewRepresentable {
         private var assets=[String:Asset](),pending=Set<String>()
         private var currentKey="",angle=MouseViewAngle.overview,selected:Int?,interactive=true
         private var installedKey="",installedAngle:MouseViewAngle?
+        private var request=UUID(),installedRequest:UUID?
         private func key(_ family:MouseFamily,_ plate:SidePlate,_ interactive:Bool)->String{"\(family.rawValue)-\(family == .naga ? plate.rawValue:12)-\(interactive)"}
-        func update(_ view:SCNView,family:MouseFamily,plate:SidePlate,selected:Int?,interactive:Bool,angle:MouseViewAngle){
-            currentKey=key(family,plate,interactive);self.selected=selected;self.angle=angle;self.interactive=interactive
+        func update(_ view:SCNView,family:MouseFamily,plate:SidePlate,selected:Int?,interactive:Bool,angle:MouseViewAngle,cameraRequest:UUID){
+            currentKey=key(family,plate,interactive);self.selected=selected;self.angle=angle;self.interactive=interactive;request=cameraRequest
             if let asset=assets[currentKey]{install(asset,in:view)}else{
                 view.scene=nil;installedKey="";installedAngle=nil
                 (view as? MouseSCNView)?.loading.startAnimation(nil)
@@ -132,12 +146,22 @@ struct MouseSceneView:NSViewRepresentable {
         private func install(_ asset:Asset,in view:SCNView){
             if installedKey != currentKey {
                 view.defaultCameraController.stopInertia();view.scene=asset.scene;view.pointOfView=asset.camera
-                installedKey=currentKey;installedAngle=nil
+                installedKey=currentKey;installedAngle=nil;installedRequest=nil
             }
             (view as? MouseSCNView)?.loading.stopAnimation(nil)
-            if installedAngle != angle {
+            if installedAngle != angle || installedRequest != request {
                 view.defaultCameraController.stopInertia()
-                MouseIllustration.position(asset.camera,angle:angle,thumbnail:!interactive);installedAngle=angle
+                SCNTransaction.begin();SCNTransaction.disableActions=true
+                // SceneKit may switch to an interactive camera while orbiting.
+                // Explicit commands always reclaim the original camera and pose.
+                asset.camera.transform=SCNMatrix4Identity
+                MouseIllustration.position(asset.camera,angle:angle,thumbnail:!interactive)
+                view.pointOfView=asset.camera
+                view.defaultCameraController.pointOfView=asset.camera
+                view.defaultCameraController.automaticTarget=false
+                view.defaultCameraController.target=SCNVector3(-4,20,0)
+                SCNTransaction.commit()
+                installedAngle=angle;installedRequest=request
             }
             for (id,node) in asset.buttons {
                 node.geometry?.firstMaterial?.diffuse.contents=id==selected ? NSColor(red:0.07,green:0.46,blue:0.49,alpha:1):asset.colors[id]
@@ -164,6 +188,7 @@ struct MouseSceneView:NSViewRepresentable {
     }
     func updateNSView(_ view:SCNView,context:Context){
         (view as? MouseSCNView)?.choose=onSelect
-        context.coordinator.update(view,family:family,plate:plate,selected:selected,interactive:interactive,angle:angle)
+        (view as? MouseSCNView)?.onRotate=onRotate
+        context.coordinator.update(view,family:family,plate:plate,selected:selected,interactive:interactive,angle:angle,cameraRequest:cameraRequest)
     }
 }

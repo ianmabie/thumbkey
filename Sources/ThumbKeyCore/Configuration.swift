@@ -32,6 +32,13 @@ public enum ActionMode: String, Codable, CaseIterable { case passthrough, shortc
     case .nextDesktop:return Chord(keyCode:124,modifiers:.control,keyLabel:"→")
     default:return nil
     }}
+    /// macOS symbolic hotkeys distinguish navigation/function keys by these flags.
+    /// A physical Control–Up trace carries both SecondaryFn and NumericPad.
+    public var presetKeyFlags:UInt64 {switch self {
+    case .missionControl,.appExpose,.previousDesktop,.nextDesktop:return (1<<23) | (1<<21)
+    case .showDesktop:return 1<<23
+    default:return 0
+    }}
     public var explanation:String {switch self {
     case .passthrough:return "ThumbKey leaves this input alone. The mouse or foreground app handles it."
     case .shortcut:return "Press the mouse button once to send these keys once, like Copy or Paste."

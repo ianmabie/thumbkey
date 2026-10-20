@@ -10,17 +10,17 @@ final class ActionRunner {
     private var postedKeys=Set<UInt16>()
     var status: ((String)->Void)?
     var suspend=false
-    private func post(_ code:UInt16,down:Bool) {
+    private func post(_ code:UInt16,down:Bool,at location:CGEventTapLocation = .cgSessionEventTap,keyFlags:CGEventFlags = []) {
         guard let e=CGEvent(keyboardEventSource:nil,virtualKey:code,keyDown:down) else{return}
         if down{postedKeys.insert(code)}else{postedKeys.remove(code)}
         e.flags=CGEventFlags(rawValue:ModifierKey.flags(physical:CGEventSource.flagsState(.hidSystemState).rawValue,pressed:postedKeys))
-        if ModifierKey.familyBits[code] != nil { e.type = .flagsChanged }
+        if ModifierKey.familyBits[code] != nil { e.type = .flagsChanged }else{e.flags.formUnion(keyFlags)}
         e.setIntegerValueField(.eventSourceUserData,value:0x54484D424B4559)
-        e.post(tap:.cgSessionEventTap)
+        e.post(tap:location)
     }
-    private func press(_ chord:Chord,owner:UUID) { for key in ownership.press(chord.keys,owner:owner) { post(key,down:true) } }
-    private func release(_ owner:UUID) { for key in ownership.release(owner:owner) { post(key,down:false) } }
-    private func tap(_ chord:Chord) { let owner=UUID();press(chord,owner:owner);release(owner) }
+    private func press(_ chord:Chord,owner:UUID,at location:CGEventTapLocation = .cgSessionEventTap,keyFlags:CGEventFlags = []) { for key in ownership.press(chord.keys,owner:owner) { post(key,down:true,at:location,keyFlags:keyFlags) } }
+    private func release(_ owner:UUID,at location:CGEventTapLocation = .cgSessionEventTap,keyFlags:CGEventFlags = []) { for key in ownership.release(owner:owner) { post(key,down:false,at:location,keyFlags:keyFlags) } }
+    private func tap(_ chord:Chord,at location:CGEventTapLocation = .cgSessionEventTap,keyFlags:CGEventFlags = []) { let owner=UUID();press(chord,owner:owner,at:location,keyFlags:keyFlags);release(owner,at:location,keyFlags:keyFlags) }
     private func text(_ text:String) {
         let units=Array(text.utf16)
         // CGEvent Unicode has a small length limit. Preserve surrogate pairs at boundaries.
@@ -45,7 +45,11 @@ final class ActionRunner {
             else {status?("This original key cannot be forwarded. Assign it a hotkey instead.")}
         case .hold:
             let owner=UUID();held[usage]=owner;press(b.chord,owner:owner)
-        case .shortcut,.missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop:tap(b.effectiveChord)
+        case .shortcut:tap(b.chord)
+        case .missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop:
+            // System symbolic hotkeys are handled before app-session delivery.
+            // Enter at the HID boundary so Dock/WindowServer can process them.
+            tap(b.effectiveChord,at:.cghidEventTap,keyFlags:CGEventFlags(rawValue:b.mode.presetKeyFlags))
         case .macro:
             let pid=NSWorkspace.shared.frontmostApplication?.processIdentifier
             let generation=UUID();lifetimes[usage]=generation

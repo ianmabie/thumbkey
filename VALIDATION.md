@@ -1,5 +1,25 @@
 # Prototype status
 
+Native system-key flags and confirmed presets, version 0.3.0 build 26 (October 19, 2026):
+
+- After build 25, captured retries showed buttons 2/3 being intercepted and routed correctly without correlation misses, but macOS still did not open the overviews. The user confirmed physical Control–Up worked. A local comparison recorded that real key event with flags `10748161`, including SecondaryFn and NumericPad; generated preset arrow events lacked those navigation bits.
+- Preset arrow key-down/up events now include SecondaryFn and NumericPad; Show Desktop's F11 includes SecondaryFn. These are key identity flags, applied to the main key rather than synthesizing an extra held modifier. Modifier press/release and other custom shortcut/dictation delivery remain unchanged. Added a regression comparing preset flags with the captured physical keyboard event.
+- All 35 core tests pass. Signed clean release build and strict installed-signature verification pass. Installed/reopened build 26 at the existing app path, retaining rollback. Native inspection confirms mappings on and individually named camera buttons. The complete saved configuration matches the pre-update snapshot. Removed temporary HID instrumentation and its enable marker from the installed release; local trace files and passive observer scripts are outside the repository.
+- The user physically retried buttons 2 and 3 in build 26 and confirmed **both Mission Control and App Exposé work now**. The receiver timing and camera recovery fixes from build 25 are included.
+
+Receiver correlation and camera recovery, version 0.3.0 build 25 (October 19, 2026):
+
+- Captured the user's literal-number failures on Naga side buttons 2 and 3. Valid receiver reports preceded their matching keyboard events by 2.85–6.12 ms, exceeding the former 2 ms correlation window; those events correctly failed open under the old rule. Expanded the bounded window to 8 ms while retaining one-use device evidence, keyboard collision rejection, stale-evidence rejection, and held-key guards. Added regressions using the captured gaps plus keyboard collisions within the expanded window. All 34 core tests pass.
+- Camera commands now reclaim the intended SceneKit point of view and camera-controller point of view, stop inertia, and reset the complete pose. Each preset click gets a distinct command, including clicking the previously selected preset after dragging. Manual dragging clears the selected preset indication. Reset returns to Overview without rebuilding the scene cache.
+- Installed a signed diagnostic candidate without changing saved assignments. Native tests confirmed manual rotation → same Overview preset, manual rotation → Top, and MX manual rotation → same Top all restore the expected view. Returning to Naga restores mappings on. A brief Secure Input interval during visual testing cleared and mappings recovered automatically.
+- Follow-up traces captured delayed Naga presses being intercepted, including a 7.35 ms transition, while an ordinary keyboard press remained native. The user still reported no overview: interception was repaired but system key identity flags also needed correction (build 26 above). Temporary input traces remain local and are not included in source control. The clean build 26 includes these timing/camera changes.
+
+System preset delivery correction, version 0.3.0 build 24 (October 19, 2026):
+
+- User testing found that the named Mission Control/App Exposé assignments did not open their window overviews. Confirmed both assignments were saved correctly, mappings were enabled, and the UI had detected button 2. Build 23's event observation established generated key pairs but did not establish system shortcut handling.
+- Named macOS presets now post their complete press/release sequence at the HID entry point (`cghidEventTap`), before app-session processing. Custom shortcuts, macros, and held dictation keys retain their existing delivery path. Generated events keep ThumbKey's marker so its input filter does not remap them recursively.
+- All 32 core tests pass. Signed release build and strict installed-signature verification pass. Installed/reopened build 24 with the previous app retained for rollback. Full saved configuration is unchanged, including button 1 Hold Control–D, button 2 Mission Control, and button 3 App Exposé. Mappings remain on. The user's retry still produced literal numbers; build 25 above addresses the captured input-correlation failures. The HID delivery change alone did not resolve the reported problem.
+
 Named macOS actions, version 0.3.0 build 23 (October 19, 2026):
 
 - Added Mission Control, App Exposé, Show Desktop, Previous Desktop, and Next Desktop directly to the Action menu under macOS actions. Named assignments appear in button tiles and the 3D selection legend. The editor shows the standard keys, an explanation, and a test button without requiring shortcut recording.

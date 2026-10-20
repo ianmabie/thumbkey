@@ -11,7 +11,10 @@ public struct InputCorrelation {
     private var pending:[Transition]=[]
     private var states:[UInt64:Set<UInt32>]=[:]
     private var nagaDevices=Set<UInt64>()
-    public var tolerance:UInt64=2_000_000 // Hardware timestamps, not callback arrival times.
+    // Receiver traces show 0.6–6.2 ms between the same HID and session event.
+    // Keep a bounded window and require one-use device evidence; keyboard
+    // collisions in this wider window still fail open.
+    public var tolerance:UInt64=8_000_000
     public init(){}
     public mutating func record(_ t:Transition){
         guard t.timestamp>0,InputSource.eventCode(t.usage) != nil else{return}
