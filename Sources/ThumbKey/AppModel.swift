@@ -39,6 +39,10 @@ final class AppModel: ObservableObject {
     @Published var saveError=""
     let capture=HIDCapture()
     let runner=ActionRunner()
+    private let shortcutOverlay=ShortcutOverlayController()
+    @Published private(set) var shortcutOverlayVisible=false
+    @Published private(set) var activeBundleID:String?
+    @Published private(set) var activeAppName=""
     @Published private(set) var testingShortcut=false
     private var shortcutTestRelease:DispatchWorkItem?
     private var permissionTimer:Timer?
@@ -69,14 +73,19 @@ final class AppModel: ObservableObject {
         loaded=saveError.isEmpty
         capture.onDevices={ [weak self] devices in self?.updateDevices(devices);self?.refreshMouseStatus() }
         hardware.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted) }
-        capture.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted) }
+        capture.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted,actionDelivered:true) }
+        capture.onActionInput={ [weak runner] usage,down,binding in runner?.physicalInput(usage,down:down,binding:binding) }
+        capture.onReset={ [weak runner] in runner?.cancelAll() }
         capture.onDisconnect={ [weak self] reason in self?.interrupted(reason) }
         capture.onError={ [weak self] text in self?.message=text }
         capture.onPlateSignal={ [weak self] signal in self?.lastPlateSignal=signal }
         capture.onActivity={ [weak self] in self?.noteNagaActivity();self?.checkExtraButtonMode() }
         runner.status={ [weak self] text in self?.message=text }
+        runner.showShortcuts={ [weak self] in self?.toggleShortcutOverlay() }
+        shortcutOverlay.onDismiss={ [weak self] in self?.shortcutOverlayVisible=false }
+        refreshActiveApplication()
         updateDevices(capture.deviceList); refreshPermissions();updateRouting()
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didActivateApplicationNotification,object:nil,queue:.main){[weak self] _ in self?.updateRouting()})
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didActivateApplicationNotification,object:nil,queue:.main){[weak self] _ in self?.refreshActiveApplication();self?.updateRouting()})
         permissionTimer=Timer.scheduledTimer(withTimeInterval:2,repeats:true){[weak self] _ in self?.refreshPermissions()}
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main){[weak self] _ in
             guard let self else{return};self.recovery.sleep();self.stopCapture();self.message=self.wantsMappings ? "Paused for sleep. Mappings will resume after wake.":"Mappings paused. Side buttons send their original keys."
@@ -92,6 +101,25 @@ final class AppModel: ObservableObject {
     var profileIndex:Int {configuration.profiles.firstIndex{$0.id==selectedProfile} ?? 0}
     var profile:Profile {configuration.profiles[profileIndex]}
     var button:ButtonBinding {profile.buttons.first{$0.id==selectedButton}!}
+    var activeProfile:Profile{configuration.profile(for:activeBundleID)}
+    var configuredShortcuts:[ShortcutReference]{ShortcutReference.configured(in:activeProfile,family:selectedMouse,plate:sidePlate)}
+    var shortcutContext:String {
+        [selectedMouse.name,selectedMouse == .naga ? sidePlate.label:nil,activeProfile.name].compactMap{$0}.joined(separator:" · ")
+    }
+    private func refreshActiveApplication(){
+        let app=NSWorkspace.shared.frontmostApplication
+        activeBundleID=app?.bundleIdentifier;activeAppName=app?.localizedName ?? ""
+    }
+    func shortcutIssue(_ reference:ShortcutReference)->String? {
+        if reference.binding.usage==nil{return "Needs identification"}
+        if selectedMouse == .naga,MouseControls.extraIDs.contains(reference.id),!extraButtonsActive{return "Extra-button reporting unavailable"}
+        return nil
+    }
+    func toggleShortcutOverlay(){
+        if shortcutOverlay.isVisible{shortcutOverlay.dismiss();return}
+        refreshActiveApplication()
+        shortcutOverlay.show(model:self);shortcutOverlayVisible=shortcutOverlay.isVisible
+    }
     func editButton(_ edit:(inout ButtonBinding)->Void) {
         cancelShortcutTest();cancelLearning();runner.cancelAll()
         guard let i=configuration.profiles[profileIndex].buttons.firstIndex(where:{$0.id==selectedButton}) else{return}
@@ -227,7 +255,7 @@ final class AppModel: ObservableObject {
             switch result {
             case .success(let (extraActive,warning)):
                 self.extraButtonsActive=extraActive;self.capture.setExtraButtonsEnabled(extraActive)
-                self.enabled=true;self.recovery.resetAttempts()
+                self.enabled=true;self.runner.setPhysicalEnabled(true);self.recovery.resetAttempts()
                 if family == .mxMaster3s{self.mouseStatuses[family]?.presence = .connected}
                 self.updateRouting()
                 self.message=warning ?? "Ready. Press a mouse button to check its mapping."
@@ -239,6 +267,8 @@ final class AppModel: ObservableObject {
         }
     }
     private func stopCapture(){
+        runner.setPhysicalEnabled(false)
+        shortcutOverlay.dismiss()
         recoveryWork?.cancel();recoveryWork=nil;enabled=false;connecting=false;checkingExtraButtons=false
         cancelShortcutTest();cancelLearning();capture.stop();runner.cancelAll()
         capture.setExtraButtonsEnabled(false);extraButtonsActive=false
@@ -248,7 +278,7 @@ final class AppModel: ObservableObject {
         }
     }
     func pause(){recovery.pause();stopCapture();message="Mappings paused. Side buttons send their original keys."}
-    func shutdown(){stopCapture();hardware.finishStopping()}
+    func shutdown(){stopCapture();runner.finishStopping();hardware.finishStopping()}
     private func interrupted(_ reason:String){
         stopCapture();message="\(reason) Held keys released. Reconnecting…";scheduleRecovery()
     }
@@ -275,8 +305,8 @@ final class AppModel: ObservableObject {
             hardware.configure(buttons,learning:learning != nil){[weak self] error in self?.pause();self?.message=error}
         }
     }
-    private func received(usage:UInt32,down:Bool,binding:ButtonBinding?,intercepted:Bool) {
-        if !down {runner.up(usage);if intercepted,let binding{message="\(MouseControls.title(binding.id)) released."};return}
+    private func received(usage:UInt32,down:Bool,binding:ButtonBinding?,intercepted:Bool,actionDelivered:Bool=false) {
+        if !down {if !actionDelivered{runner.up(usage)};if intercepted,let binding{message="\(MouseControls.title(binding.id)) released."};return}
         guard enabled else{return}
         if let target=learning {
             runner.cancelAll()
@@ -287,7 +317,7 @@ final class AppModel: ObservableObject {
             return
         }
         if let binding{lastButton=binding.id;message="\(MouseControls.title(binding.id)) · \(binding.mode.label)"}
-        if intercepted{runner.down(usage,binding:binding)}
+        if intercepted && !actionDelivered{runner.physicalInput(usage,down:true,binding:binding)}
     }
     func recordChanged(_ recording:Bool){cancelShortcutTest();cancelLearning();runner.cancelAll();runner.suspend=recording}
     private func cancelShortcutTest(){

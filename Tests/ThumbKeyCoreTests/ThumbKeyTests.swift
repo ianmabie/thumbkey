@@ -2,6 +2,43 @@ import XCTest
 @testable import ThumbKeyCore
 
 final class ThumbKeyTests:XCTestCase {
+    func testShortcutReferenceUsesActiveAppMouseAndPlateWithoutLeakingOtherMappings()throws{
+        var config=Configuration()
+        func set(_ id:Int,_ mode:ActionMode){
+            let index=config.profiles[0].buttons.firstIndex{$0.id==id}!
+            config.profiles[0].buttons[index].mode=mode
+        }
+        set(2,.missionControl);set(3,.appExpose);set(10,.showShortcuts)
+        set(101,.showDesktop);set(201,.showShortcuts);set(301,.nextDesktop)
+        set(4,.shortcut);set(5,.macro);set(6,.disabled)
+        let macro=config.profiles[0].buttons.firstIndex{$0.id==5}!
+        config.profiles[0].buttons[macro].steps=[MacroStep(kind:.delay)]
+        var scoped=config.profiles[0];scoped.id=UUID();scoped.name="Notes";scoped.bundleID="com.apple.Notes"
+        let index=scoped.buttons.firstIndex{$0.id==2}!
+        scoped.buttons[index].mode = .hold;scoped.buttons[index].name="Talk"
+        scoped.buttons[index].chord=Chord(keyCode:2,modifiers:.control,keyLabel:"D")
+        config.profiles.append(scoped)
+        config=try config.validated()
+        let global=ShortcutReference.configured(in:config.profile(for:nil),family:.naga,plate:.twelve)
+        XCTAssertEqual(global.map(\.id),[2,3,10])
+        XCTAssertEqual(global.map(\.actionName),["Mission Control","App Exposé","Show shortcut overlay"])
+        let app=ShortcutReference.configured(in:config.profile(for:"com.apple.Notes"),family:.naga,plate:.twelve)
+        XCTAssertEqual(app.first?.actionName,"Talk");XCTAssertEqual(app.first?.keys,"Hold ⌃D")
+        XCTAssertEqual(ShortcutReference.configured(in:scoped,family:.naga,plate:.six).map(\.id),[101])
+        XCTAssertEqual(ShortcutReference.configured(in:scoped,family:.naga,plate:.two).map(\.id),[201])
+        XCTAssertEqual(ShortcutReference.configured(in:scoped,family:.mxMaster3s,plate:.twelve).map(\.id),[301])
+        XCTAssertEqual(try JSONDecoder().decode(Configuration.self,from:JSONEncoder().encode(config)).validated(),config)
+    }
+    func testMacroReferenceShowsCountsAndNeverItsText() {
+        var profile=Profile()
+        let index=profile.buttons.firstIndex{$0.id==7}!
+        profile.buttons[index].mode = .macro
+        var step=MacroStep(kind:.text);step.text="Private macro contents"
+        profile.buttons[index].steps=[step]
+        let reference=ShortcutReference.configured(in:profile,family:.naga,plate:.twelve).first!
+        XCTAssertEqual(reference.keys,"1 action")
+        XCTAssertFalse(reference.menuTitle.contains(step.text))
+    }
     func testMacPresetFlagsMatchCapturedPhysicalArrowEvent() {
         // Real Control–Up on the user's keyboard: flags 10748161. Compare the
         // standard modifier/navigation bits, excluding device-dependent bits.
@@ -76,7 +113,7 @@ final class ThumbKeyTests:XCTestCase {
             XCTAssertNil(button.mode.presetChord)
             XCTAssertEqual(button.effectiveChord,button.chord)
         }}
-        XCTAssertEqual(Set(ActionMode.customActions+ActionMode.macOSActions),Set(ActionMode.allCases))
+        XCTAssertEqual(Set(ActionMode.customActions+ActionMode.macOSActions+ActionMode.thumbKeyActions),Set(ActionMode.allCases))
     }
     func testNewSelectionAndPauseInvalidatePendingHardwareWork(){
         let requests=RequestGeneration()
@@ -204,6 +241,41 @@ final class ThumbKeyTests:XCTestCase {
 }
 
 final class CorrelationTests:XCTestCase {
+    func testHIDBoundaryUsesExactCapturedHardwareIdentityDespiteSessionDelays() {
+        let reports:[(UInt64,UInt64)] = [(2_850_918_480_766,118_788_270_031_916),(2_851_118_014_040,118_796_583_918_333)]
+        for (ticks,nanoseconds) in reports {
+            XCTAssertEqual(InputTimestamp.nanoseconds(ticks,numerator:125,denominator:3),nanoseconds)
+            var correlation=InputCorrelation(tolerance:0)
+            correlation.record(.init(usage:32,down:true,timestamp:nanoseconds,naga:true,device:1))
+            XCTAssertEqual(correlation.consume(keyCode:20,down:true,timestamp:nanoseconds+1),.missing)
+            XCTAssertEqual(correlation.consume(keyCode:20,down:true,timestamp:InputTimestamp.nanoseconds(ticks,numerator:125,denominator:3)),.naga(32))
+        }
+        XCTAssertEqual(InputTimestamp.nanoseconds(9_007_199_254_740_993,numerator:1,denominator:1),9_007_199_254_740_993)
+    }
+    func testQueuedRapidPressesConsumeOneTransitionPerDevice() {
+        var correlation=InputCorrelation()
+        let base:UInt64=1_000_000_000
+        // HID callbacks can run ahead while the event filter is waiting. Keep
+        // the second complete click even when it overlaps the matching window.
+        for device:UInt64 in [1,2] {
+            for (offset,down):(UInt64,Bool) in [(0,true),(2_000_000,false),(6_000_000,true),(8_000_000,false)] {
+                correlation.record(.init(usage:31,down:down,timestamp:base+offset,naga:true,device:device))
+            }
+        }
+        for (offset,down):(UInt64,Bool) in [(500_000,true),(2_500_000,false),(6_500_000,true),(8_500_000,false)] {
+            XCTAssertEqual(correlation.consume(keyCode:19,down:down,timestamp:base+offset),.naga(31))
+        }
+        XCTAssertEqual(correlation.consume(keyCode:19,down:true,timestamp:base+6_500_000),.missing)
+    }
+    func testRapidKeyboardTransitionsRemainSeparateAndNative() {
+        var correlation=InputCorrelation()
+        let base:UInt64=1_000_000_000
+        correlation.record(.init(usage:31,down:true,timestamp:base,naga:false,device:8))
+        correlation.record(.init(usage:31,down:true,timestamp:base+6_000_000,naga:false,device:8))
+        XCTAssertEqual(correlation.consume(keyCode:19,down:true,timestamp:base+500_000),.otherKeyboard)
+        XCTAssertEqual(correlation.consume(keyCode:19,down:true,timestamp:base+6_500_000),.otherKeyboard)
+        XCTAssertEqual(correlation.consume(keyCode:19,down:true,timestamp:base+6_500_000),.missing)
+    }
     func testNagaEvidenceIsConsumedOnce(){
         var c=InputCorrelation();c.record(.init(usage:30,down:true,timestamp:1_000_000_000,naga:true,device:1))
         XCTAssertEqual(c.consume(keyCode:18,down:true,timestamp:1_000_010_000),.naga(30))

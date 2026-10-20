@@ -24,7 +24,7 @@ final class HIDCapture {
     private let condition=NSCondition()
     private var interfaces:[UInt64:NagaInterface]=[:]
     private var endpoints:[UInt64:Endpoint]=[:]
-    private var correlation=InputCorrelation()
+    private var correlation=InputCorrelation(tolerance:0)
     private var bindings:[UInt32:ButtonBinding]=[:]
     private var keyCodes=Set<UInt16>()
     private var learning=false
@@ -41,6 +41,8 @@ final class HIDCapture {
     private var running=false
     var onDevices:(([NagaInterface])->Void)?
     var onInput:((UInt32,Bool,ButtonBinding?,Bool)->Void)?
+    var onActionInput:((UInt32,Bool,ButtonBinding?)->Void)?
+    var onReset:(()->Void)?
     var onHardwarePress:((UInt32)->Void)?
     var onError:((String)->Void)?
     var onDisconnect:((String)->Void)?
@@ -69,7 +71,7 @@ final class HIDCapture {
         condition.lock();defer{condition.unlock()}
         bindings=Dictionary(uniqueKeysWithValues:next.compactMap{b in b.usage.map{($0,b)}})
         self.learning=learning
-        let sources=learning ? Array(KeyboardMap.usageToKey.keys).filter{$0>=4 && $0<224} + (4...32).map{InputSource.mouse(UInt32($0))}:Array(bindings.keys)
+        let sources=learning ? Array(KeyboardMap.usageToKey.keys).filter{$0>=4 && $0<224} + (4...32).map{InputSource.mouse(UInt32($0))}:bindings.values.filter{$0.mode != .passthrough}.compactMap(\.usage)
         keyCodes=Set(sources.compactMap(InputSource.eventCode))
     }
     private func connected(_ d:IOHIDDevice){
@@ -100,7 +102,7 @@ final class HIDCapture {
         let mask=(1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.otherMouseUp.rawValue)
         let current=UUID()
         let context=TapContext(owner:self,generation:current)
-        guard let port=CGEvent.tapCreate(tap:.cgSessionEventTap,place:.headInsertEventTap,options:.defaultTap,eventsOfInterest:CGEventMask(mask),callback:{_,type,event,context in
+        guard let port=CGEvent.tapCreate(tap:.cghidEventTap,place:.headInsertEventTap,options:.defaultTap,eventsOfInterest:CGEventMask(mask),callback:{_,type,event,context in
             guard let context else{return Unmanaged.passUnretained(event)}
             let state=Unmanaged<TapContext>.fromOpaque(context).takeUnretainedValue()
             guard let owner=state.owner else{return Unmanaged.passUnretained(event)}
@@ -126,6 +128,7 @@ final class HIDCapture {
     }
     func stop(){
         condition.lock();running=false;generation=UUID();correlation.reset();active=[:];vendorStates=[:];activeVendor=[:];let loop=tapLoop;tapLoop=nil;condition.broadcast();condition.unlock()
+        onReset?()
         if let tap{CGEvent.tapEnable(tap:tap,enable:false);CFMachPortInvalidate(tap);self.tap=nil};tapContext=nil
         if let loop{CFRunLoopPerformBlock(loop,CFRunLoopMode.commonModes.rawValue){CFRunLoopStop(loop)};CFRunLoopWakeUp(loop)}
         for endpoint in endpoints.values{IOHIDDeviceCancel(endpoint.device)}
@@ -153,7 +156,7 @@ final class HIDCapture {
             let keys=endpoint.interface.isMouse ? Set(decoded.filter{(4...32).contains($0)}.map(InputSource.mouse)):decoded
             let previous=endpoint.reports[UInt32(reportID)] ?? []
             endpoint.reports[UInt32(reportID)]=keys
-            let stamp=UInt64(Double(ticks)*Double(HIDCapture.timebase.numer)/Double(HIDCapture.timebase.denom))
+            let stamp=InputTimestamp.nanoseconds(ticks,numerator:HIDCapture.timebase.numer,denominator:HIDCapture.timebase.denom)
             endpoint.owner?.record(endpoint:endpoint,downs:keys.subtracting(previous),ups:previous.subtracting(keys),timestamp:stamp)
         },Unmanaged.passUnretained(endpoint).toOpaque())
         // The cancel handler retains the buffer/context until all callbacks have drained.
@@ -204,6 +207,7 @@ final class HIDCapture {
         let button=event.getIntegerValueField(.mouseEventButtonNumber)
         if mouse && !(3...31).contains(button){return Unmanaged.passUnretained(event)}
         let code=mouse ? UInt16(0x100+button):UInt16(event.getIntegerValueField(.keyboardEventKeycode)),down=type == .keyDown || type == .otherMouseDown
+        let eventStamp=InputTimestamp.nanoseconds(event.timestamp,numerator:Self.timebase.numer,denominator:Self.timebase.denom)
         condition.lock();defer{condition.unlock()}
         guard running,keyCodes.contains(code) || active[code] != nil else{return Unmanaged.passUnretained(event)}
         if !mouse && down && event.getIntegerValueField(.keyboardEventAutorepeat) != 0{
@@ -213,15 +217,15 @@ final class HIDCapture {
             return Unmanaged.passUnretained(event)
         }
         let deadline=Date(timeIntervalSinceNow:0.012)
-        // Wait briefly for both HID streams before attributing a Naga event. A
-        // keyboard collision arriving after the mouse report must still fail open.
-        var match=correlation.peek(keyCode:code,down:down,timestamp:event.timestamp)
+        // At the HID boundary both streams retain the same hardware timestamp.
+        // Wait only for missing evidence, then route an exact match immediately.
+        var match=correlation.peek(keyCode:code,down:down,timestamp:eventStamp)
         while running && Date()<deadline{
-            if match == .otherKeyboard || match == .ambiguous{break}
+            if match != .missing{break}
             condition.wait(until:deadline)
-            match=correlation.peek(keyCode:code,down:down,timestamp:event.timestamp)
+            match=correlation.peek(keyCode:code,down:down,timestamp:eventStamp)
         }
-        match=correlation.consume(keyCode:code,down:down,timestamp:event.timestamp)
+        match=correlation.consume(keyCode:code,down:down,timestamp:eventStamp)
         guard running else{return Unmanaged.passUnretained(event)}
         guard case .naga(let usage)=match else{
             // If identity is ambiguous, stop the remapped hold and leave this event native.
@@ -239,10 +243,14 @@ final class HIDCapture {
         deliver(usage:usage,down:false,binding:press.binding,intercepted:press.intercepted)
         return press.intercepted ? nil:Unmanaged.passUnretained(event)
     }
-    // Called under the condition lock; the UI/actions execute later on the main queue.
+    // Called under the condition lock. Action submission only enqueues worker work;
+    // UI updates execute later on the main queue.
     private func deliver(usage:UInt32,down:Bool,binding:ButtonBinding?,intercepted:Bool){
+        if intercepted && !learning{onActionInput?(usage,down,binding)}
         let current=generation
-        DispatchQueue.main.async{[weak self] in guard let self,self.isCurrent(current) else{return};self.onInput?(usage,down,binding,intercepted)}
+        DispatchQueue.main.async{[weak self] in guard let self,self.isCurrent(current) else{return}
+            self.onInput?(usage,down,binding,intercepted)
+        }
     }
     deinit{stop();IOHIDManagerUnscheduleFromRunLoop(manager,CFRunLoopGetMain(),CFRunLoopMode.commonModes.rawValue);IOHIDManagerClose(manager,0)}
 }

@@ -65,6 +65,17 @@ struct MenuControls:View {
         Button("Open ThumbKey"){openWindow(id:"main");NSApp.activate(ignoringOtherApps:true)}
         Button(model.wantsMappings ? "Pause mappings":"Enable mappings"){model.toggleEnabled()}
         Divider()
+        Section("Configured shortcuts · " + model.activeProfile.name){
+            if model.configuredShortcuts.isEmpty{Text("No shortcuts assigned for this mouse")}
+            ForEach(model.configuredShortcuts){reference in
+                Button(reference.menuTitle + (model.shortcutIssue(reference)==nil ? "":" · Unavailable")){
+                    model.selectedProfile=model.activeProfile.id;model.select(reference.id)
+                    openWindow(id:"main");NSApp.activate(ignoringOtherApps:true)
+                }.help("Edit this button’s mapping")
+            }
+        }
+        Button(model.shortcutOverlayVisible ? "Hide shortcut overlay":"Show shortcut overlay"){model.toggleShortcutOverlay()}
+        Divider()
         Button("Release held keys & pause"){model.pause()}
         Button("Quit ThumbKey"){model.shutdown();NSApp.terminate(nil)}
     }
@@ -171,7 +182,10 @@ struct ButtonEditor:View {
         VStack(alignment:.leading,spacing:20){
             HStack{VStack(alignment:.leading,spacing:5){Text(MouseControls.title(model.selectedButton)).font(.title2.bold());Text(model.profileIndex==0 ? "Used everywhere unless an app profile overrides it.":"Used when \(model.profile.name) is the active app.").font(.caption).foregroundStyle(.secondary)};Spacer()}
             VStack(alignment:.leading,spacing:6){Text("Name (optional)").font(.subheadline.weight(.medium));TextField("What does this button do?",text:field(\.name)).textFieldStyle(.roundedBorder)}
-            VStack(alignment:.leading,spacing:6){Text("Action").font(.subheadline.weight(.medium));Picker("Action",selection:field(\.mode)){ForEach(ActionMode.customActions,id:\.self){Text($0.label).tag($0)};Divider();Section("macOS actions"){ForEach(ActionMode.macOSActions,id:\.self){Text($0.label).tag($0)}}}.labelsHidden();Text(model.button.mode.explanation).font(.callout).foregroundStyle(.secondary)}
+            VStack(alignment:.leading,spacing:6){Text("Action").font(.subheadline.weight(.medium));Picker("Action",selection:field(\.mode)){ForEach(ActionMode.customActions,id:\.self){Text($0.label).tag($0)};Divider();Section("macOS actions"){ForEach(ActionMode.macOSActions,id:\.self){Text($0.label).tag($0)}};Divider();Section("ThumbKey"){ForEach(ActionMode.thumbKeyActions,id:\.self){Text($0.label).tag($0)}}}.labelsHidden();Text(model.button.mode.explanation).font(.callout).foregroundStyle(.secondary)}
+            if model.button.mode == .showShortcuts {
+                Button("Preview shortcut overlay"){model.toggleShortcutOverlay()}
+            }
             if let chord=model.button.mode.presetChord {
                 VStack(alignment:.leading,spacing:8){
                     HStack{Text("Shortcut sent once per press").font(.subheadline.weight(.medium));Spacer();Text(chord.label).font(.body.monospaced()).padding(.horizontal,10).padding(.vertical,5).background(Color.primary.opacity(0.06),in:RoundedRectangle(cornerRadius:6))}

@@ -11,11 +11,10 @@ public struct InputCorrelation {
     private var pending:[Transition]=[]
     private var states:[UInt64:Set<UInt32>]=[:]
     private var nagaDevices=Set<UInt64>()
-    // Receiver traces show 0.6–6.2 ms between the same HID and session event.
-    // Keep a bounded window and require one-use device evidence; keyboard
-    // collisions in this wider window still fail open.
+    // Tolerant matching remains available for legacy session-stage evidence.
+    // HIDCapture explicitly uses zero tolerance for exact hardware identity.
     public var tolerance:UInt64=8_000_000
-    public init(){}
+    public init(tolerance:UInt64=8_000_000){self.tolerance=tolerance}
     public mutating func record(_ t:Transition){
         guard t.timestamp>0,InputSource.eventCode(t.usage) != nil else{return}
         if t.naga {nagaDevices.insert(t.device)}
@@ -41,11 +40,30 @@ public struct InputCorrelation {
     }
     public mutating func consume(keyCode:UInt16,down:Bool,timestamp:UInt64)->Match {
         let result=peek(keyCode:keyCode,down:down,timestamp:timestamp)
-        let consumed=Set(matchingIndices(keyCode:keyCode,down:down,timestamp:timestamp))
+        // Consume one nearest transition per device. Multiple interfaces can
+        // report one physical press, but a queued second press is still distinct.
+        var nearest=[UInt64:Int]()
+        for index in matchingIndices(keyCode:keyCode,down:down,timestamp:timestamp) {
+            let device=pending[index].device
+            if let previous=nearest[device],distance(pending[previous].timestamp,timestamp)<=distance(pending[index].timestamp,timestamp){continue}
+            nearest[device]=index
+        }
+        let consumed=Set(nearest.values)
         pending=pending.enumerated().filter{!consumed.contains($0.offset)}.map(\.element)
         return result
     }
     public func nagaHeld(keyCode:UInt16)->Bool{states.contains{nagaDevices.contains($0.key) && $0.value.contains{InputSource.eventCode($0)==keyCode}}}
     public func otherHeld(keyCode:UInt16)->Bool{states.contains{!nagaDevices.contains($0.key) && $0.value.contains{InputSource.eventCode($0)==keyCode}}}
     public mutating func reset(){pending=[];states=[:];nagaDevices=[]}
+}
+
+/// The HID tap and IOHID callbacks expose the original mach clock ticks. Convert
+/// both with the same integer operation; session-stage event timestamps are later
+/// rewritten by WindowServer and cannot identify the original report exactly.
+public enum InputTimestamp {
+    public static func nanoseconds(_ ticks:UInt64,numerator:UInt32,denominator:UInt32)->UInt64 {
+        precondition(denominator>0)
+        let divisor=UInt64(denominator),multiplier=UInt64(numerator)
+        return (ticks/divisor)*multiplier + (ticks%divisor)*multiplier/divisor
+    }
 }

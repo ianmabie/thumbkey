@@ -25,6 +25,12 @@ The **Action** menu also includes named **macOS actions**: Mission Control (Cont
 - **Superwhispr**: hold Right Command. Select Right Command as the push-to-talk key in Superwhispr too.
 - **LocalScribe**: reads LocalScribe’s current configured keyboard shortcut and fills it as held keys. Reapply the preset if that shortcut changes. If no saved shortcut exists, it uses Control–Option–Space, which is also the initial button 1 mapping for a new configuration.
 
+### Shortcut reference
+
+Open ThumbKey’s menu bar icon to see the configured actions for the active mouse, side plate, and foreground app profile. Each row names the physical button, action, and keys; click a row to edit that mapping. Unassigned, disabled, and unfinished actions are omitted. Macro contents are represented by action counts.
+
+Choose **Action → ThumbKey → Show shortcut overlay** on any button to toggle a floating shortcut reference. The menu bar also offers **Show shortcut overlay**, and the button editor provides a preview. The overlay leaves keyboard focus in the foreground app, follows its profile, and can be closed with the same mouse button, Escape, its close button, or an outside click. Configured extra controls that are unavailable or need identification are labeled accordingly. Pausing or changing mouse capture closes the overlay.
+
 ### MX Master 3S
 
 Five physical presses are supported: Back, Forward, main wheel click, thumb-rest gesture press, and the wheel-mode button. The thumb rest maps its press, not movement gestures. Primary left/right clicks and vertical/horizontal scrolling stay native. Only assigned buttons are temporarily diverted through HID++ 2.0 REPROG_CONTROLS_V4; pause, quit, or a startup failure restores each button’s previous reporting state. No persistent button configuration, DPI, or onboard settings are written. Avoid running another mouse remapper on the same buttons.
@@ -75,7 +81,7 @@ If optional Naga extra-button reporting fails, the standard side-panel mappings 
 
 ThumbKey observes Naga keyboard and mouse HID interfaces nonexclusively. It filters keyboard and auxiliary mouse events only when one-use hardware timestamp evidence identifies the Naga. Left/right/middle click and pointer motion remain native. Other keyboards and mice provide transient collision evidence, not actions. Unmatched or ambiguous events pass through. Dedicated V3 Pro button report 4 is handled separately and cannot collide with ordinary keyboard usages of the same number.
 
-No keyboard history is saved. A bounded in-memory queue holds timing evidence and clears when mapping stops. Candidate events can wait up to 12 ms for HID/collision checks. This is conservative correlation, not a system-provided device identity for every event. Other remappers may conflict. Consumer/media controls and wheel tilt remapping are outside this version. No scripts, shell execution, root helper, or private entitlement are included.
+No keyboard history is saved. A bounded in-memory queue holds timing evidence and clears when mapping stops. The input filter matches Naga reports to events at the HID boundary using their original hardware timestamp. Matching evidence routes immediately; missing evidence waits at most 12 ms and then leaves the event native. Ambiguous input also stays native. A dedicated action queue sends shortcuts independently of the app’s UI, including while window overview animations run. Other remappers may conflict. Consumer/media controls and wheel tilt remapping are outside this version. No scripts, shell execution, root helper, or private entitlement are included.
 
 ## Build and validation
 
@@ -90,7 +96,7 @@ Override build paths with `THUMBKEY_BUILD_DIR`, `THUMBKEY_CACHE_DIR`, `THUMBKEY_
 
 `ThumbKey --devices` lists compatible input interfaces without starting capture. `ThumbKey --check-extra-mode` temporarily enables extra-button reporting, verifies it, then verifies restoration of the original mode; it does not start mappings.
 
-Tests cover configuration migration, per-plate routing/learning, actual V3 keyboard/mouse report descriptors, dedicated reports, mode packet validation, left/right modifier flags, held-key ownership, recovery, and conservative input correlation. See [VALIDATION.md](VALIDATION.md) for completed checks and physical checks still pending.
+Tests cover configuration migration, per-plate routing/learning, actual V3 keyboard/mouse report descriptors, dedicated reports, mode packet validation, left/right modifier flags, held-key ownership, recovery, exact hardware-timestamp correlation, rapid action delivery, and cancellation. See [VALIDATION.md](VALIDATION.md) for completed checks and physical checks still pending.
 
 Protocol research used the [OpenRazer V3 Pro pull request](https://github.com/openrazer/openrazer/pull/2904), [hardware issue](https://github.com/openrazer/openrazer/issues/2885), and [naga-control](https://github.com/Rainexn0b/naga-control). ThumbKey implements the observed wire format independently and includes no code or dependency from those projects.
 

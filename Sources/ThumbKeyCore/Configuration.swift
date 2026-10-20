@@ -20,10 +20,11 @@ public struct Chord: Codable, Equatable, Hashable {
     public var isEmpty: Bool { keys.isEmpty }
     public var label: String { isEmpty ? "Choose keys…" : modifiers.symbols + (keyCode.flatMap{ModifierKey.names[$0]} ?? keyLabel) }
 }
-public enum ActionMode: String, Codable, CaseIterable { case passthrough, shortcut, hold, macro, disabled, missionControl, appExpose, showDesktop, previousDesktop, nextDesktop
-    public var label: String { switch self { case .passthrough: return "Keep default action"; case .shortcut: return "Press a shortcut once"; case .hold: return "Hold keys while pressed"; case .macro: return "Run a sequence of actions"; case .disabled: return "Disable this button"; case .missionControl:return "Mission Control"; case .appExpose:return "App Exposé"; case .showDesktop:return "Show Desktop"; case .previousDesktop:return "Previous Desktop"; case .nextDesktop:return "Next Desktop" } }
+public enum ActionMode: String, Codable, CaseIterable { case passthrough, shortcut, hold, macro, disabled, missionControl, appExpose, showDesktop, previousDesktop, nextDesktop, showShortcuts
+    public var label: String { switch self { case .passthrough: return "Keep default action"; case .shortcut: return "Press a shortcut once"; case .hold: return "Hold keys while pressed"; case .macro: return "Run a sequence of actions"; case .disabled: return "Disable this button"; case .missionControl:return "Mission Control"; case .appExpose:return "App Exposé"; case .showDesktop:return "Show Desktop"; case .previousDesktop:return "Previous Desktop"; case .nextDesktop:return "Next Desktop"; case .showShortcuts:return "Show shortcut overlay" } }
     public static let customActions:[Self] = [.passthrough,.shortcut,.hold,.macro,.disabled]
     public static let macOSActions:[Self] = [.missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop]
+    public static let thumbKeyActions:[Self] = [.showShortcuts]
     public var presetChord:Chord? {switch self {
     case .missionControl:return Chord(keyCode:126,modifiers:.control,keyLabel:"↑")
     case .appExpose:return Chord(keyCode:125,modifiers:.control,keyLabel:"↓")
@@ -50,6 +51,7 @@ public enum ActionMode: String, Codable, CaseIterable { case passthrough, shortc
     case .showDesktop:return "Move windows aside to show the desktop. Press again to bring them back."
     case .previousDesktop:return "Switch to the desktop or full-screen space on the left."
     case .nextDesktop:return "Switch to the desktop or full-screen space on the right."
+    case .showShortcuts:return "Show the shortcuts for your active mouse, side plate, and app profile. Press again, press Escape, or click outside to close. Your current app keeps keyboard focus."
     }}
 }
 public enum StepKind: String, Codable, CaseIterable { case shortcut, text, delay }
@@ -69,9 +71,9 @@ public struct ButtonBinding: Codable, Identifiable, Equatable {
     public var chord = Chord()
     public var steps: [MacroStep] = []
     public init(id: Int, usage: UInt32?) { self.id=id; self.usage=usage }
-    public var title: String { name.isEmpty ? (mode.presetChord == nil ? MouseControls.title(id):mode.label) : name }
+    public var title: String { name.isEmpty ? (mode.presetChord == nil && mode != .showShortcuts ? MouseControls.title(id):mode.label) : name }
     public var effectiveChord:Chord {mode.presetChord ?? chord}
-    public var detail: String { switch mode { case .passthrough: return MouseControls.extraIDs.contains(id) ? "Not assigned":"Default action"; case .disabled: return "Disabled"; case .shortcut: return chord.label; case .hold: return "Hold " + chord.label; case .macro: return "\(steps.count) " + (steps.count==1 ? "action":"actions"); case .missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop:return mode.label } }
+    public var detail: String { switch mode { case .passthrough: return MouseControls.extraIDs.contains(id) ? "Not assigned":"Default action"; case .disabled: return "Disabled"; case .shortcut: return chord.label; case .hold: return "Hold " + chord.label; case .macro: return "\(steps.count) " + (steps.count==1 ? "action":"actions"); case .missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop,.showShortcuts:return mode.label } }
 }
 public struct Profile: Codable, Identifiable, Equatable {
     public var id = UUID()
