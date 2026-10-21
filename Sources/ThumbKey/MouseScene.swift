@@ -64,7 +64,7 @@ struct MouseMappingScene:View {
                     .accessibilityAddTraits(!manuallyRotated && angle==preset ? .isSelected:[])
             }}.padding(3).background(Color.primary.opacity(0.06),in:RoundedRectangle(cornerRadius:8))
             MouseSceneView(family:model.selectedMouse,plate:model.sidePlate,selected:model.selectedButton,interactive:true,angle:angle,cameraRequest:cameraRequest,onRotate:{manuallyRotated=true},onSelect:model.select)
-                .accessibilityLabel("Rotatable 3D mouse illustration. Use the button list below to select a mapping with the keyboard.")
+                .accessibilityLabel("Rotatable 3D mouse illustration. Switch to List view to select a mapping with the keyboard.")
             HStack(spacing:5){Text("Drag to rotate");Spacer();Text("3D illustration").help("Built-in illustration with approximate button positions, not a manufacturer scan.")}.font(.system(size:10)).foregroundStyle(.secondary)
             HStack(spacing:6){Circle().fill(.teal).frame(width:6,height:6);Text(MouseControls.title(model.selectedButton)).fontWeight(.medium);Text("·");Text(model.button.detail).lineLimit(1);Spacer()}.font(.caption)
         }.padding(14).background(Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:14))

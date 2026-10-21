@@ -1,3 +1,9 @@
+Separate button-map views, version 0.3.0 build 33 (October 20, 2026):
+
+- Added a pinned 3D view / List view switch above the left pane. The full model and button rows are mutually exclusive; only the small device selector thumbnails remain in both modes. List mode shows labeled rows with custom names, action detail, selection border, and checkmark. Both views share the same selected button and editor. View changes start at the top of their content and the preference persists across relaunches.
+- Naga list mode includes the selected plate’s side buttons plus top/ring-finger controls; MX mode lists its five supported controls. The plate selector remains available in both Naga views. Extra-button reporting moved to a disclosure in either view, and the 3D accessibility hint points keyboard users to List view.
+- Signed release compilation and strict signature verification pass. Installed/relaunched build 33 with rollback app/configuration saved outside the repository. Native UI checks verified no button list in 3D mode, no main 3D scene in List mode, Naga 12-button plus five extra rows, MX five rows, selecting side button 4 from the list, and the same selection/editor after returning to 3D. A quit/relaunch retained List mode. Returned the app to Naga / 12-button plate / 3D view with mappings on. Saved bindings equal the pre-install snapshot. No new tests were added for this presentation-only change; physical input code is unchanged.
+
 Figma comment preset, version 0.3.0 build 32 (October 20, 2026):
 
 - Added Action → Figma → Add comment (C), using Figma’s documented C shortcut for comment mode. Sends the key once; the user then chooses a canvas location and writes the comment. The editor explains text-field focus, exiting with Escape, and using a Figma app profile. Named action/reference display and persistence preserve the previous custom chord when switching modes.

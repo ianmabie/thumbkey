@@ -120,33 +120,7 @@ struct ContentView:View {
             }.padding(.horizontal,24).padding(.vertical,14)
             Divider()
             HSplitView {
-                ScrollView { VStack(alignment:.leading,spacing:18){
-                    MouseMappingScene().frame(height:390)
-
-                    if model.selectedMouse == .naga {
-                    Text("SIDE PLATE").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Picker("Attached side plate",selection:Binding(get:{model.sidePlate},set:{model.selectPlate($0)})) {
-                        ForEach(SidePlate.allCases){plate in Text("\(plate.rawValue) buttons").tag(plate)}
-                    }.pickerStyle(.segmented)
-                    Text("Select the attached plate after swapping it. Each plate saves its own mappings; automatic detection is not available yet.").font(.caption).foregroundStyle(.secondary)
-                    LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:10),count:model.sidePlate == .twelve ? 4:model.sidePlate == .two ? 2:3),spacing:10){
-                        ForEach(model.plateLayoutButtons){button in ButtonTile(button:button)}
-                    }
-                    Divider()
-                    HStack{Text("TOP & RING-FINGER BUTTONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary);Spacer()}
-                    Toggle("Enable extra-button reporting",isOn:Binding(get:{model.extraButtonsEnabled},set:{model.setExtraButtons($0)}))
-                    Text("Uses a temporary mouse mode over USB or the USB receiver. The original mode returns when you pause or quit. Unassigned extra buttons may stop their usual DPI or wheel functions while enabled.").font(.caption).foregroundStyle(.secondary)
-                    VStack(spacing:8){ForEach(model.extraButtons){button in ButtonTile(button:button,compact:true)}}
-                    } else {
-                        Text("MX MASTER 3S BUTTONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        Text("Choose a button, then assign a shortcut or macro. ThumbKey temporarily takes control only of assigned buttons. Pause restores their original behavior.").font(.caption).foregroundStyle(.secondary)
-                        VStack(spacing:10){ForEach(model.sideButtons){button in ButtonTile(button:button,compact:true)}}
-                        Label("Scrolling and primary clicks keep working normally.",systemImage:"cursorarrow").font(.caption).foregroundStyle(.secondary)
-                    }
-                    if let last=model.lastButton{Label("Last press: \(MouseControls.title(last))",systemImage:"checkmark.circle").font(.caption).foregroundStyle(accent)}
-                    Spacer(minLength:0)
-                    Label("Runs locally. No accounts or network requests.",systemImage:"lock").font(.caption).foregroundStyle(.secondary)
-                }.padding(24) }.frame(minWidth:410,idealWidth:460,maxWidth:560)
+                ButtonMapView().frame(minWidth:410,idealWidth:460,maxWidth:560)
                 ScrollView{ButtonEditor().padding(24)}.frame(minWidth:360,maxWidth:.infinity)
             }
             if !model.message.isEmpty || !model.saveError.isEmpty {
@@ -155,6 +129,59 @@ struct ContentView:View {
         }.background(Color(nsColor:.windowBackgroundColor)).tint(accent)
     }
 }
+struct ButtonMapView:View {
+    @EnvironmentObject var model:AppModel
+    @AppStorage("buttonMapShowsList") private var showsList=false
+    @State private var reportingExpanded=false
+    var body:some View {
+        VStack(spacing:0){
+            Picker("Button map view",selection:$showsList){
+                Label("3D view",systemImage:"cube").tag(false)
+                Label("List view",systemImage:"list.bullet").tag(true)
+            }.pickerStyle(.segmented).accessibilityLabel("Button map view")
+                .padding(.horizontal,24).padding(.vertical,14)
+            Divider()
+            ScrollView{mapContent.padding(24)}.id(showsList)
+        }
+    }
+    private var mapContent:some View {
+        VStack(alignment:.leading,spacing:18){
+            if !showsList{MouseMappingScene().frame(height:390)}
+
+            if model.selectedMouse == .naga {
+                VStack(alignment:.leading,spacing:8){
+                    Text("ATTACHED SIDE PLATE").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Picker("Attached side plate",selection:Binding(get:{model.sidePlate},set:{model.selectPlate($0)})){
+                        ForEach(SidePlate.allCases){plate in Text("\(plate.rawValue) buttons").tag(plate)}
+                    }.pickerStyle(.segmented)
+                    Text("Select the attached plate after swapping it. Each plate saves its own mappings; automatic detection is not available yet.").font(.caption).foregroundStyle(.secondary)
+                }
+                if showsList {
+                    Text("SIDE BUTTONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    VStack(spacing:8){ForEach(model.sideButtons){button in ButtonTile(button:button,compact:true)}}
+                    Text("TOP & RING-FINGER BUTTONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    VStack(spacing:8){ForEach(model.extraButtons){button in ButtonTile(button:button,compact:true)}}
+                }
+                Divider()
+                DisclosureGroup("Extra-button reporting",isExpanded:$reportingExpanded){
+                    VStack(alignment:.leading,spacing:10){
+                        Toggle("Enable extra-button reporting",isOn:Binding(get:{model.extraButtonsEnabled},set:{model.setExtraButtons($0)}))
+                        Text("Uses a temporary mouse mode over USB or the USB receiver. The original mode returns when you pause or quit. Unassigned extra buttons may stop their usual DPI or wheel functions while enabled.").font(.caption).foregroundStyle(.secondary)
+                    }.padding(.top,8)
+                }
+            } else {
+                if showsList {
+                    Text("MX MASTER 3S BUTTONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    VStack(spacing:8){ForEach(model.sideButtons){button in ButtonTile(button:button,compact:true)}}
+                }
+                Label("Scrolling and primary clicks keep working normally.",systemImage:"cursorarrow").font(.caption).foregroundStyle(.secondary)
+            }
+            if let last=model.lastButton{Label("Last press: \(MouseControls.title(last))",systemImage:"checkmark.circle").font(.caption).foregroundStyle(.teal)}
+            Label("Runs locally. No accounts or network requests.",systemImage:"lock").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
 struct ButtonTile:View {
     @EnvironmentObject var model:AppModel
     let button:ButtonBinding
@@ -165,7 +192,7 @@ struct ButtonTile:View {
         Button{model.select(button.id)}label:{
             Group {
                 if compact {
-                    HStack(spacing:12){Text("\(button.id>=301 ? button.id-300:MouseControls.number(button.id))").font(.caption.weight(.bold)).frame(width:25,height:25).background(selected ? accent.opacity(0.15):Color.primary.opacity(0.06),in:Circle()).foregroundStyle(selected ? accent:Color.secondary);VStack(alignment:.leading,spacing:4){Text(MouseControls.title(button.id)).font(.subheadline.weight(.medium));Text(button.detail).font(.caption).foregroundStyle(.secondary)};Spacer()}
+                    HStack(spacing:12){Text("\(button.id>=301 ? button.id-300:MouseControls.number(button.id))").font(.caption.weight(.bold)).frame(width:25,height:25).background(selected ? accent.opacity(0.15):Color.primary.opacity(0.06),in:Circle()).foregroundStyle(selected ? accent:Color.secondary);VStack(alignment:.leading,spacing:4){Text(MouseControls.title(button.id)).font(.subheadline.weight(.medium));Text(button.name.isEmpty ? button.detail:button.name + " · " + button.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)};Spacer();if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(accent)}}
                 } else {
                     VStack(alignment:.leading,spacing:8){HStack{Text("\(MouseControls.number(button.id))").font(.system(size:26,weight:.semibold,design:.rounded));Spacer();if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(accent)}};Text(button.title).font(.subheadline.weight(.medium)).lineLimit(1);Text(button.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)}.frame(minHeight:80)
                 }
