@@ -17,7 +17,7 @@ final class ShortcutOverlayController {
         dismiss()
         guard let screen=NSScreen.screens.first(where:{$0.frame.contains(NSEvent.mouseLocation)}) ?? NSScreen.main else{return}
         let visible=screen.visibleFrame
-        let size=NSSize(width:min(720,visible.width-48),height:min(max(280,180+CGFloat(model.configuredShortcuts.count)*76),min(620,visible.height-64)))
+        let size=NSSize(width:min(720,visible.width-48),height:min(max(320,240+CGFloat(model.configuredShortcuts.count)*76),min(620,visible.height-64)))
         let panel=ShortcutPanel(contentRect:NSRect(origin:.zero,size:size),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
         panel.title="ThumbKey shortcuts";panel.isReleasedWhenClosed=false
         panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=true
@@ -51,8 +51,10 @@ private struct ShortcutOverlayView:View {
     var body:some View {
         VStack(alignment:.leading,spacing:0){
             HStack(alignment:.top,spacing:12){
-                Image(systemName:"computermouse.fill").font(.title2).foregroundStyle(.teal).padding(10)
-                    .background(Color.teal.opacity(0.12),in:RoundedRectangle(cornerRadius:12))
+                Image(nsImage:MouseIllustration.thumbnail(family:model.selectedMouse,plate:model.selectedMouse == .naga ? model.sidePlate:.twelve))
+                    .renderingMode(.original).resizable().interpolation(.high).scaledToFit()
+                    .frame(width:116,height:116).allowsHitTesting(false)
+                    .accessibilityLabel("Static 3D render of " + model.selectedMouse.name + (model.selectedMouse == .naga ? ", " + model.sidePlate.label:""))
                 VStack(alignment:.leading,spacing:5){
                     Text("Your shortcuts").font(.title2.bold())
                     Text(model.shortcutContext).font(.subheadline).foregroundStyle(.secondary)

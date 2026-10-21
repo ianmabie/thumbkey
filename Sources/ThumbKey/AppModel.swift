@@ -111,11 +111,12 @@ final class AppModel: ObservableObject {
         let app=NSWorkspace.shared.frontmostApplication
         activeBundleID=app?.bundleIdentifier;activeAppName=app?.localizedName ?? ""
     }
-    func shortcutIssue(_ reference:ShortcutReference)->String? {
-        if reference.binding.usage==nil{return "Needs identification"}
-        if selectedMouse == .naga,MouseControls.extraIDs.contains(reference.id),!extraButtonsActive{return "Extra-button reporting unavailable"}
+    func buttonIssue(_ binding:ButtonBinding)->String? {
+        if selectedMouse == .naga,MouseControls.extraIDs.contains(binding.id),!extraButtonsActive{return "Unavailable: extra-button reporting is not connected."}
+        if binding.usage==nil{return "Identify this physical button before using its action."}
         return nil
     }
+    func shortcutIssue(_ reference:ShortcutReference)->String? {buttonIssue(reference.binding)}
     func toggleShortcutOverlay(){
         if shortcutOverlay.isVisible{shortcutOverlay.dismiss();return}
         refreshActiveApplication()
@@ -186,12 +187,13 @@ final class AppModel: ObservableObject {
         if resume{attemptStart()}
     }
     private func checkExtraButtonMode(){
-        guard enabled,extraButtonsActive,!checkingExtraButtons else{return}
+        guard enabled,selectedMouse == .naga,extraButtonsEnabled,!checkingExtraButtons else{return}
         checkingExtraButtons=true
         hardware.checkExtraButtons{[weak self] result in
             guard let self else{return};self.checkingExtraButtons=false
             switch result {
             case .success(let restored):
+                self.extraButtonsActive=true;self.capture.setExtraButtonsEnabled(true)
                 if restored {
                     self.runner.cancelAll()
                     guard self.capture.start() else{self.pause();self.message="Could not restart input observation after mouse idle.";return}

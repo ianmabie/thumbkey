@@ -59,7 +59,10 @@ final class MouseHardware {
         queue.async{[self] in
             guard session.matches(request) else{return}
             let result:Result<Bool,Error>
-            do{result = .success(try naga.ensure())}catch{try? naga.restore();result = .failure(error)}
+            do{
+                if naga.active{result = .success(try naga.ensure())}
+                else{try naga.activate();result = .success(true)}
+            }catch{try? naga.restore();result = .failure(error)}
             DispatchQueue.main.async{[self] in guard session.matches(request) else{return};completion(result)}
         }
     }

@@ -2,14 +2,16 @@ import Foundation
 
 /// Wire-format facts from OpenRazer's Naga V3 Pro support. No firmware/profile writes.
 public enum NagaProtocol {
-    public static func modeRequest(set mode:UInt8?=nil)->[UInt8] {
+    // Read-only negotiation: this receiver answers 1F/3F but times out on FF.
+    public static let modeTransactions:[UInt8] = [0x1f,0x3f,0xff]
+    public static func modeRequest(set mode:UInt8?=nil,transaction:UInt8=0x1f)->[UInt8] {
         precondition(mode == nil || mode == 0 || mode == 3)
         var packet=[UInt8](repeating:0,count:90)
-        packet[1]=0xff;packet[5]=2;packet[7]=mode == nil ? 0x84:0x04;packet[8]=mode ?? 0
+        packet[1]=transaction;packet[5]=2;packet[7]=mode == nil ? 0x84:0x04;packet[8]=mode ?? 0
         packet[88]=packet[2..<88].reduce(0,^);return packet
     }
-    public static func modeResponse(_ packet:[UInt8],command:UInt8)->UInt8? {
-        guard packet.count==90,packet[0]==2,packet[1]==0xff,packet[5]==2,packet[6]==0,packet[7]==command,
+    public static func modeResponse(_ packet:[UInt8],command:UInt8,transaction:UInt8=0x1f)->UInt8? {
+        guard packet.count==90,packet[0]==2,packet[1]==transaction,packet[5]==2,packet[6]==0,packet[7]==command,
               packet[88]==packet[2..<88].reduce(0,^),packet[9]==0,(packet[8]==0 || packet[8]==3) else{return nil}
         return packet[8]
     }

@@ -7,6 +7,7 @@ import ThumbKeyCore
 final class NagaDriverMode {
     private var device:IOHIDDevice?
     private var previous:UInt8?
+    private var transaction:UInt8=0x1f
     var active:Bool {device != nil}
     func activate() throws {
         if active{return}
@@ -23,7 +24,15 @@ final class NagaDriverMode {
         guard IOHIDDeviceOpen(fresh,0)==kIOReturnSuccess else{throw ModeError.message("Could not open the Naga control interface. Check Input Monitoring and reconnect the mouse.")}
         device=fresh
         do {
-            previous=try exchange()
+            // Negotiate with read-only queries before any mode write. Keep the
+            // accepted transaction for activation, idle recovery and restoration.
+            var failure:Error?
+            for candidate in NagaProtocol.modeTransactions {
+                transaction=candidate
+                do{previous=try exchange();break}catch{failure=error}
+            }
+            guard previous != nil else{throw failure ?? ModeError.message("The Naga did not answer its reporting-mode query.")}
+
             if previous != 3 {_ = try exchange(set:3)}
             guard try exchange()==3 else{throw ModeError.message("The mouse did not enter extra-button mode.")}
         } catch {
@@ -45,13 +54,13 @@ final class NagaDriverMode {
     }
     private func exchange(set mode:UInt8?=nil) throws -> UInt8 {
         guard let device else{throw ModeError.message("Mouse control interface is disconnected.")}
-        let request=NagaProtocol.modeRequest(set:mode)
+        let request=NagaProtocol.modeRequest(set:mode,transaction:transaction)
         let sent=IOHIDDeviceSetReport(device,kIOHIDReportTypeFeature,0,request,request.count)
         guard sent==kIOReturnSuccess else{throw ModeError.message("Mouse control request failed (\(String(format:"0x%08x",UInt32(bitPattern:sent)))).")}
         Thread.sleep(forTimeInterval:0.1)
         var response=[UInt8](repeating:0,count:90),length=90
         let status=IOHIDDeviceGetReport(device,kIOHIDReportTypeFeature,0,&response,&length)
-        guard status==kIOReturnSuccess,length==90,let result=NagaProtocol.modeResponse(response,command:mode == nil ? 0x84:0x04) else {
+        guard status==kIOReturnSuccess,length==90,let result=NagaProtocol.modeResponse(response,command:mode == nil ? 0x84:0x04,transaction:transaction) else {
             throw ModeError.message("The mouse did not acknowledge its reporting mode. No onboard profile was changed.")
         }
         return result

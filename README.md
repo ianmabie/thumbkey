@@ -112,3 +112,11 @@ Tests cover configuration migration, per-plate routing/learning, actual V3 keybo
 Protocol research used the [OpenRazer V3 Pro pull request](https://github.com/openrazer/openrazer/pull/2904), [hardware issue](https://github.com/openrazer/openrazer/issues/2885), and [naga-control](https://github.com/Rainexn0b/naga-control). ThumbKey implements the observed wire format independently and includes no code or dependency from those projects.
 
 MX protocol references: [Logitech HID++ feature documentation](https://github.com/Logitech/cpg-docs), [OpenLogi device IDs](https://openlogi.org/hidpp/model-ids), and [Solaar’s observed wire formats](https://github.com/pwr-Solaar/Solaar). ThumbKey implements the protocol independently and bundles no code from these projects. `--check-mx` reads device/control/battery data; `--check-mx-buttons` also verifies temporary diversion and restoration of all five controls without starting mappings.
+
+## Extra buttons and shortcut reference
+
+The shortcut overlay uses the same cached static render as the mouse selector, built from the main 3D mesh and selected Naga side plate; the overlay graphic does not rotate or intercept clicks.
+
+Naga extra-button setup negotiates its receiver transaction ID with read-only queries before entering temporary reporting mode. It keeps the accepted ID for mode checks and restoration, and retries on Naga activity after an asleep receiver could not be configured. Unavailable extra controls show a warning and reconnection action. A saved shortcut is inactive when its action is Keep default action; use Hold keys while pressed for dictation. Focus a text field before dictating to insert there.
+
+Protocol cross-checks: [OpenRazer Naga V3 support](https://github.com/openrazer/openrazer/pull/2904) and the [Naga3Mapper control implementation](https://github.com/potnkettle/Naga3Mapper/blob/main/Sources/Core/Razer.swift). Only the wire-format facts were used; ThumbKey keeps its own non-seizing HID capture and per-event keyboard isolation.

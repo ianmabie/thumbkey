@@ -192,7 +192,7 @@ struct ButtonTile:View {
         Button{model.select(button.id)}label:{
             Group {
                 if compact {
-                    HStack(spacing:12){Text("\(button.id>=301 ? button.id-300:MouseControls.number(button.id))").font(.caption.weight(.bold)).frame(width:25,height:25).background(selected ? accent.opacity(0.15):Color.primary.opacity(0.06),in:Circle()).foregroundStyle(selected ? accent:Color.secondary);VStack(alignment:.leading,spacing:4){Text(MouseControls.title(button.id)).font(.subheadline.weight(.medium));Text(button.name.isEmpty ? button.detail:button.name + " · " + button.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)};Spacer();if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(accent)}}
+                    HStack(spacing:12){Text("\(button.id>=301 ? button.id-300:MouseControls.number(button.id))").font(.caption.weight(.bold)).frame(width:25,height:25).background(selected ? accent.opacity(0.15):Color.primary.opacity(0.06),in:Circle()).foregroundStyle(selected ? accent:Color.secondary);VStack(alignment:.leading,spacing:4){Text(MouseControls.title(button.id)).font(.subheadline.weight(.medium));Text(button.name.isEmpty ? button.detail:button.name + " · " + button.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2);if let issue=model.buttonIssue(button){Text(issue).font(.caption2).foregroundStyle(.orange).lineLimit(2)}};Spacer();if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(accent)}}
                 } else {
                     VStack(alignment:.leading,spacing:8){HStack{Text("\(MouseControls.number(button.id))").font(.system(size:26,weight:.semibold,design:.rounded));Spacer();if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(accent)}};Text(button.title).font(.subheadline.weight(.medium)).lineLimit(1);Text(button.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)}.frame(minHeight:80)
                 }
@@ -208,8 +208,20 @@ struct ButtonEditor:View {
     var body:some View {
         VStack(alignment:.leading,spacing:20){
             HStack{VStack(alignment:.leading,spacing:5){Text(MouseControls.title(model.selectedButton)).font(.title2.bold());Text(model.profileIndex==0 ? "Used everywhere unless an app profile overrides it.":"Used when \(model.profile.name) is the active app.").font(.caption).foregroundStyle(.secondary)};Spacer()}
+            if let issue=model.buttonIssue(model.button) {
+                VStack(alignment:.leading,spacing:8){
+                    Label(issue,systemImage:"exclamationmark.triangle.fill").font(.callout).foregroundStyle(.orange)
+                    if model.selectedMouse == .naga,MouseControls.extraIDs.contains(model.selectedButton),!model.extraButtonsActive {
+                        Text("The action is saved, but this button cannot trigger it yet. Side button 10 can open the overlay while you reconnect the extra buttons.").font(.caption).foregroundStyle(.secondary)
+                        Button("Reconnect extra buttons"){model.setExtraButtons(true)}
+                    }
+                }.padding(12).frame(maxWidth:.infinity,alignment:.leading).background(Color.orange.opacity(0.08),in:RoundedRectangle(cornerRadius:10))
+            }
             VStack(alignment:.leading,spacing:6){Text("Name (optional)").font(.subheadline.weight(.medium));TextField("What does this button do?",text:field(\.name)).textFieldStyle(.roundedBorder)}
             VStack(alignment:.leading,spacing:6){Text("Action").font(.subheadline.weight(.medium));Picker("Action",selection:field(\.mode)){ForEach(ActionMode.customActions,id:\.self){Text($0.label).tag($0)};Divider();Section("macOS actions"){ForEach(ActionMode.macOSActions,id:\.self){Text($0.label).tag($0)}};Divider();Section("Figma"){ForEach(ActionMode.figmaActions,id:\.self){Text($0.label).tag($0)}};Divider();Section("ThumbKey"){ForEach(ActionMode.thumbKeyActions,id:\.self){Text($0.label).tag($0)}}}.labelsHidden();Text(model.button.mode.explanation).font(.callout).foregroundStyle(.secondary)}
+            if model.button.mode == .passthrough && !model.button.chord.isEmpty {
+                Text("This button sends its default input. The saved shortcut (" + model.button.chord.label + ") is inactive; choose Hold keys while pressed or Press a shortcut once to use it.").font(.caption).foregroundStyle(.orange)
+            }
             if model.button.mode == .showShortcuts {
                 Button("Preview shortcut overlay"){model.toggleShortcutOverlay()}
             }

@@ -420,6 +420,25 @@ final class ExtraControlTests:XCTestCase {
         }
         XCTAssertNil(NagaProtocol.modeResponse(Array(query.dropLast()),command:0x84))
     }
+    func testCapturedReceiverModeRepliesRequireTheNegotiatedTransactionAndValidCRC(){
+        // Actual read-only responses on the 00E8 receiver: 1F/3F succeed,
+        // FF returns timeout status 04 and must never unlock mode writes.
+        for transaction:UInt8 in [0x1f,0x3f,0xff] {
+            var reply=NagaProtocol.modeRequest(transaction:transaction)
+            reply[0]=transaction == 0xff ? 4:2
+            XCTAssertEqual(NagaProtocol.modeResponse(reply,command:0x84,transaction:transaction),transaction == 0xff ? nil:0)
+            if transaction != 0xff {
+                XCTAssertNil(NagaProtocol.modeResponse(reply,command:0x84,transaction:0xff))
+                reply[88] ^= 1;XCTAssertNil(NagaProtocol.modeResponse(reply,command:0x84,transaction:transaction))
+            }
+        }
+        for transaction in NagaProtocol.modeTransactions {
+            var reply=NagaProtocol.modeRequest(set:3,transaction:transaction);reply[0]=2
+            XCTAssertEqual(NagaProtocol.modeResponse(reply,command:4,transaction:transaction),3)
+            reply[9]=1;reply[88]=reply[2..<88].reduce(0,^)
+            XCTAssertNil(NagaProtocol.modeResponse(reply,command:4,transaction:transaction))
+        }
+    }
     func testActualMouseDescriptorSeparatesPrimaryClicksFromSideButtons() {
         let hex="05010902a1010901a100050919012905150025017501950581027501950b8103050c0a38021581257f750895018106050109381581257f7508950181060930093116018026ff7f751095028106c0c0"
         let layout=KeyboardReportLayout(descriptor:decode(hex),usagePage:9)
