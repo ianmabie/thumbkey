@@ -22,6 +22,8 @@ The **Action** menu also includes named **macOS actions**: Mission Control (Cont
 
 **Action → Figma → Pan canvas (hold Space)** holds Space until the mouse button is released. In Figma, hold that button and left-click-drag to move the canvas; releasing restores the previous tool. Click the canvas first if text editing has focus. Add a Figma app profile before assigning it if you want the button to keep its other action in other apps. You can also record Space using **Hold keys while pressed**.
 
+**Action → Figma → Add comment (C)** sends C once to enter [Figma’s comment mode](https://help.figma.com/hc/en-us/articles/360041068574-Add-comments-to-files). Click the canvas where you want the comment, then type your message. Press Escape to leave comment mode. Click the canvas first if a text field is focused; use a Figma app profile to limit this assignment to Figma.
+
 **Fill in a dictation shortcut** offers two presets. These fill in keys; they do not launch or configure the other app:
 
 - **Superwhispr**: hold Right Command. Select Right Command as the push-to-talk key in Superwhispr too.

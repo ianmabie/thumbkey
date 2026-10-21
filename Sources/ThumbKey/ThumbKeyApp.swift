@@ -193,6 +193,8 @@ struct ButtonEditor:View {
                         .disabled(model.testingShortcut || !model.accessibilityAllowed || model.secureInputBlocked)
                     if model.button.mode == .figmaPan {
                         Text("The test holds Space for three seconds. For normal use, hold the assigned mouse button while left-clicking and dragging the canvas. Use a Figma app profile to keep this assignment specific to Figma.").font(.caption).foregroundStyle(.secondary)
+                    } else if model.button.mode == .figmaComment {
+                        Text("Sends C once to enter comment mode. In Figma, click the canvas to place your comment, then type your message. Use a Figma app profile to keep this assignment specific to Figma.").font(.caption).foregroundStyle(.secondary)
                     } else {
                         Text("Uses the standard macOS shortcut. Enable it in System Settings → Keyboard → Keyboard Shortcuts → Mission Control. If you changed the keys there, choose Press a shortcut once to use your custom keys.").font(.caption).foregroundStyle(.secondary)
                     }

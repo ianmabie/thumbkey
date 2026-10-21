@@ -1,3 +1,9 @@
+Figma comment preset, version 0.3.0 build 32 (October 20, 2026):
+
+- Added Action → Figma → Add comment (C), using Figma’s documented C shortcut for comment mode. Sends the key once; the user then chooses a canvas location and writes the comment. The editor explains text-field focus, exiting with Escape, and using a Figma app profile. Named action/reference display and persistence preserve the previous custom chord when switching modes.
+- All 50 tests pass (41 core, 9 runtime). The new runtime check verifies C down/up on press, no extra output on release, repeat presses, no stale custom shortcut, and no unintended modifier flags. Existing preset persistence/reference tests include the new action. These checks use injected outputs; physical Figma comment interaction has not been tested and no comment was posted.
+- Signed build 32 installed and relaunched with mappings enabled, prior app/configuration retained outside the repository, and strict signature verification passing. Native inspection confirms both Figma presets in the Action menu. No button was assigned the comment preset. During menu inspection, a concurrent action change was observed on button 1; its saved chord remains intact. Clarification was requested before further changing that assignment.
+
 Figma canvas preset, version 0.3.0 build 31 (October 20, 2026):
 
 - Added Action → Figma → Pan canvas (hold Space), based on Figma’s documented temporary Hand tool shortcut. The preset holds Space until the physical button releases; the user left-click-drags the canvas while holding it. The editor explains canvas focus, held behavior, three-second testing, and using a Figma app profile. The shortcut menu and overlay show Hold Space. Existing custom chords remain saved if the user switches action modes.

@@ -20,15 +20,16 @@ public struct Chord: Codable, Equatable, Hashable {
     public var isEmpty: Bool { keys.isEmpty }
     public var label: String { isEmpty ? "Choose keys…" : modifiers.symbols + (keyCode.flatMap{ModifierKey.names[$0]} ?? keyLabel) }
 }
-public enum ActionMode: String, Codable, CaseIterable { case passthrough, shortcut, hold, macro, disabled, missionControl, appExpose, showDesktop, previousDesktop, nextDesktop, showShortcuts, figmaPan
-    public var label: String { switch self { case .passthrough: return "Keep default action"; case .shortcut: return "Press a shortcut once"; case .hold: return "Hold keys while pressed"; case .macro: return "Run a sequence of actions"; case .disabled: return "Disable this button"; case .missionControl:return "Mission Control"; case .appExpose:return "App Exposé"; case .showDesktop:return "Show Desktop"; case .previousDesktop:return "Previous Desktop"; case .nextDesktop:return "Next Desktop"; case .showShortcuts:return "Show shortcut overlay"; case .figmaPan:return "Pan canvas (hold Space)" } }
+public enum ActionMode: String, Codable, CaseIterable { case passthrough, shortcut, hold, macro, disabled, missionControl, appExpose, showDesktop, previousDesktop, nextDesktop, showShortcuts, figmaPan, figmaComment
+    public var label: String { switch self { case .passthrough: return "Keep default action"; case .shortcut: return "Press a shortcut once"; case .hold: return "Hold keys while pressed"; case .macro: return "Run a sequence of actions"; case .disabled: return "Disable this button"; case .missionControl:return "Mission Control"; case .appExpose:return "App Exposé"; case .showDesktop:return "Show Desktop"; case .previousDesktop:return "Previous Desktop"; case .nextDesktop:return "Next Desktop"; case .showShortcuts:return "Show shortcut overlay"; case .figmaPan:return "Pan canvas (hold Space)"; case .figmaComment:return "Add comment (C)" } }
     public static let customActions:[Self] = [.passthrough,.shortcut,.hold,.macro,.disabled]
     public static let macOSActions:[Self] = [.missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop]
-    public static let figmaActions:[Self] = [.figmaPan]
+    public static let figmaActions:[Self] = [.figmaPan,.figmaComment]
     public var holdsKeys:Bool{self == .hold || self == .figmaPan}
     public static let thumbKeyActions:[Self] = [.showShortcuts]
     public var presetChord:Chord? {switch self {
     case .figmaPan:return Chord(keyCode:49,keyLabel:"Space")
+    case .figmaComment:return Chord(keyCode:8,keyLabel:"C")
     case .missionControl:return Chord(keyCode:126,modifiers:.control,keyLabel:"↑")
     case .appExpose:return Chord(keyCode:125,modifiers:.control,keyLabel:"↓")
     case .showDesktop:return Chord(keyCode:103,keyLabel:"F11")
@@ -49,6 +50,7 @@ public enum ActionMode: String, Codable, CaseIterable { case passthrough, shortc
     case .hold:return "The chosen keys stay down for as long as you hold the mouse button. Release the button to release the keys. Use this for push-to-talk or a modifier such as Right Command."
     case .macro:return "Run the steps below in order: shortcuts, text, and optional delays."
     case .figmaPan:return "Hold this mouse button, then left-click and drag in Figma to move the canvas. Release to return to your previous tool. Click the canvas first if a text field is focused."
+    case .figmaComment:return "Press this mouse button to enter Figma’s comment mode, then click the canvas where you want to leave a comment and type your message. Press Escape to exit comment mode. Click the canvas first if a text field is focused."
     case .disabled:return "Ignore this button while ThumbKey mappings are enabled."
     case .missionControl:return "Show all open windows and desktops. Press again to return."
     case .appExpose:return "Show all windows belonging to the current app."
@@ -77,7 +79,7 @@ public struct ButtonBinding: Codable, Identifiable, Equatable {
     public init(id: Int, usage: UInt32?) { self.id=id; self.usage=usage }
     public var title: String { name.isEmpty ? (mode.presetChord == nil && mode != .showShortcuts ? MouseControls.title(id):mode.label) : name }
     public var effectiveChord:Chord {mode.presetChord ?? chord}
-    public var detail: String { switch mode { case .passthrough: return MouseControls.extraIDs.contains(id) ? "Not assigned":"Default action"; case .disabled: return "Disabled"; case .shortcut: return chord.label; case .hold: return "Hold " + chord.label; case .figmaPan:return "Hold Space"; case .macro: return "\(steps.count) " + (steps.count==1 ? "action":"actions"); case .missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop,.showShortcuts:return mode.label } }
+    public var detail: String { switch mode { case .passthrough: return MouseControls.extraIDs.contains(id) ? "Not assigned":"Default action"; case .disabled: return "Disabled"; case .shortcut: return chord.label; case .hold: return "Hold " + chord.label; case .figmaPan:return "Hold Space"; case .macro: return "\(steps.count) " + (steps.count==1 ? "action":"actions"); case .missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop,.showShortcuts,.figmaComment:return mode.label } }
 }
 public struct Profile: Codable, Identifiable, Equatable {
     public var id = UUID()

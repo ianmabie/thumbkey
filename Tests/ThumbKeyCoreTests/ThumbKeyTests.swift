@@ -80,10 +80,10 @@ final class ThumbKeyTests:XCTestCase {
         correlation.record(.init(usage:31,down:true,timestamp:stamp,naga:false,device:2))
         XCTAssertEqual(correlation.consume(keyCode:19,down:true,timestamp:stamp+6_000_000),.otherKeyboard)
     }
-    func testNamedMacActionsOverrideStaleKeysAndPreserveCustomShortcut()throws{
+    func testNamedTapPresetsOverrideStaleKeysAndPreserveCustomShortcut()throws{
         let expected:[(ActionMode,UInt16,Modifiers,String)] = [
             (.missionControl,126,.control,"Mission Control"),(.appExpose,125,.control,"App Exposé"),
-            (.showDesktop,103,[],"Show Desktop"),(.previousDesktop,123,.control,"Previous Desktop"),(.nextDesktop,124,.control,"Next Desktop")
+            (.showDesktop,103,[],"Show Desktop"),(.previousDesktop,123,.control,"Previous Desktop"),(.nextDesktop,124,.control,"Next Desktop"),(.figmaComment,8,[],"Add comment (C)")
         ]
         let custom=Chord(keyCode:2,modifiers:.control,keyLabel:"D")
         var config=Configuration()
@@ -94,6 +94,10 @@ final class ThumbKeyTests:XCTestCase {
             XCTAssertEqual(button.effectiveChord.keyCode,key)
             XCTAssertEqual(button.effectiveChord.modifiers,modifiers)
             XCTAssertEqual(button.title,label);XCTAssertEqual(button.detail,label)
+            XCTAssertFalse(mode.holdsKeys)
+            let reference=ShortcutReference(binding:button)
+            XCTAssertEqual(reference.actionName,label)
+            XCTAssertEqual(reference.keys,button.effectiveChord.label)
             button.name="My custom name"
             XCTAssertEqual(button.title,"My custom name")
             button.mode = .hold

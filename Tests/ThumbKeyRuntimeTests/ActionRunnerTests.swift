@@ -14,6 +14,20 @@ final class ActionRunnerTests:XCTestCase {
     func binding(_ id:Int,_ mode:ActionMode,_ chord:Chord=Chord())->ButtonBinding{
         var binding=ButtonBinding(id:id,usage:UInt32(id+29));binding.mode=mode;binding.chord=chord;return binding
     }
+    func testFigmaCommentTapsCOnPressWithoutHoldingOrSendingOldCustomKeys(){
+        let output=Recorder(),runner=ActionRunner(keyOutput:{output.add($0,$1,$2,$3)},physicalFlags:{0},foregroundPID:{1})
+        let comment=binding(5,.figmaComment,Chord(keyCode:2,modifiers:.control,keyLabel:"D"))
+        runner.setPhysicalEnabled(true)
+        runner.physicalInput(34,down:true,binding:comment);runner.finishStopping()
+        XCTAssertEqual(output.keys.map(\.code),[8,8])
+        XCTAssertEqual(output.keys.map(\.down),[true,false])
+        runner.physicalInput(34,down:false,binding:nil);runner.finishStopping()
+        XCTAssertEqual(output.keys.count,2)
+        runner.physicalInput(34,down:true,binding:comment)
+        runner.physicalInput(34,down:false,binding:nil);runner.finishStopping()
+        XCTAssertEqual(output.keys.map(\.down),[true,false,true,false])
+        XCTAssertTrue(output.keys.allSatisfy{$0.code==8 && $0.flags==0 && $0.location==CGEventTapLocation.cgSessionEventTap.rawValue})
+    }
     func testFigmaPanHoldsSpaceUntilReleaseAndPauseClearsIt(){
         let output=Recorder(),runner=ActionRunner(keyOutput:{output.add($0,$1,$2,$3)},physicalFlags:{0},foregroundPID:{1})
         // A previous custom shortcut must not replace the preset's Space key.
