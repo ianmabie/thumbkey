@@ -1,3 +1,10 @@
+Figma canvas preset, version 0.3.0 build 31 (October 20, 2026):
+
+- Added Action → Figma → Pan canvas (hold Space), based on Figma’s documented temporary Hand tool shortcut. The preset holds Space until the physical button releases; the user left-click-drags the canvas while holding it. The editor explains canvas focus, held behavior, three-second testing, and using a Figma app profile. The shortcut menu and overlay show Hold Space. Existing custom chords remain saved if the user switches action modes.
+- All 49 tests pass (41 core, 8 runtime). New checks cover persistence/reference display despite stale custom keys, key-down lasting until button-up, repeated-down suppression, and releasing Space on pause. These use injected key outputs; physical Figma canvas dragging has not been tested.
+- Signed build 31 installed and relaunched at the existing path, with the prior app/configuration retained outside the repository. Strict signature verification passes. Native inspection confirms the Figma section and preset in the Action picker, mappings on, and Naga connected over 2.4 GHz. The picker was canceled without changing any assignment; saved configuration equals the pre-install snapshot.
+- Follow-up on build 30: the user reported rapid input was “much better” after installation. No further literal-number failures were reported in that feedback.
+
 Shortcut reference and rapid-input handling, version 0.3.0 build 30 (October 20, 2026):
 
 - Added the active profile’s configured shortcuts to the menu bar and a Show shortcut overlay action, with nonactivating floating reference, profile context, unavailable-control labels, and dismissal controls. Assigned the user’s Everywhere / 12-button Naga side button 10 through the native editor. A configuration comparison confirms only that binding changed; buttons 1–3 and all other saved settings are preserved. The native action picker, selected assignment, and preview control were verified. The computer-use adapter selected only the main window for screenshots; the separate floating panel and menu-bar popover still need hands-on visual confirmation.

@@ -14,6 +14,23 @@ final class ActionRunnerTests:XCTestCase {
     func binding(_ id:Int,_ mode:ActionMode,_ chord:Chord=Chord())->ButtonBinding{
         var binding=ButtonBinding(id:id,usage:UInt32(id+29));binding.mode=mode;binding.chord=chord;return binding
     }
+    func testFigmaPanHoldsSpaceUntilReleaseAndPauseClearsIt(){
+        let output=Recorder(),runner=ActionRunner(keyOutput:{output.add($0,$1,$2,$3)},physicalFlags:{0},foregroundPID:{1})
+        // A previous custom shortcut must not replace the preset's Space key.
+        let pan=binding(4,.figmaPan,Chord(keyCode:2,modifiers:.control,keyLabel:"D"))
+        runner.setPhysicalEnabled(true)
+        runner.physicalInput(33,down:true,binding:pan);runner.finishStopping()
+        XCTAssertEqual(output.keys.map(\.code),[49]);XCTAssertEqual(output.keys.map(\.down),[true])
+        runner.physicalInput(33,down:true,binding:pan);runner.finishStopping()
+        XCTAssertEqual(output.keys.count,1)
+        runner.physicalInput(33,down:false,binding:nil);runner.finishStopping()
+        XCTAssertEqual(output.keys.map(\.down),[true,false])
+        runner.physicalInput(33,down:true,binding:pan);runner.finishStopping()
+        runner.setPhysicalEnabled(false);runner.finishStopping()
+        XCTAssertEqual(output.keys.map(\.code),[49,49,49,49])
+        XCTAssertEqual(output.keys.map(\.down),[true,false,true,false])
+        XCTAssertTrue(output.keys.allSatisfy{$0.flags==0 && $0.location==CGEventTapLocation.cgSessionEventTap.rawValue})
+    }
     func testCompleteMacroDeliversShortcutThenTextInOrder() {
         let done=expectation(description:"text after shortcut"),output=Recorder()
         let runner=ActionRunner(keyOutput:{output.add($0,$1,$2,$3)},textOutput:{value in

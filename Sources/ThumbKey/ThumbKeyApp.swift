@@ -182,16 +182,20 @@ struct ButtonEditor:View {
         VStack(alignment:.leading,spacing:20){
             HStack{VStack(alignment:.leading,spacing:5){Text(MouseControls.title(model.selectedButton)).font(.title2.bold());Text(model.profileIndex==0 ? "Used everywhere unless an app profile overrides it.":"Used when \(model.profile.name) is the active app.").font(.caption).foregroundStyle(.secondary)};Spacer()}
             VStack(alignment:.leading,spacing:6){Text("Name (optional)").font(.subheadline.weight(.medium));TextField("What does this button do?",text:field(\.name)).textFieldStyle(.roundedBorder)}
-            VStack(alignment:.leading,spacing:6){Text("Action").font(.subheadline.weight(.medium));Picker("Action",selection:field(\.mode)){ForEach(ActionMode.customActions,id:\.self){Text($0.label).tag($0)};Divider();Section("macOS actions"){ForEach(ActionMode.macOSActions,id:\.self){Text($0.label).tag($0)}};Divider();Section("ThumbKey"){ForEach(ActionMode.thumbKeyActions,id:\.self){Text($0.label).tag($0)}}}.labelsHidden();Text(model.button.mode.explanation).font(.callout).foregroundStyle(.secondary)}
+            VStack(alignment:.leading,spacing:6){Text("Action").font(.subheadline.weight(.medium));Picker("Action",selection:field(\.mode)){ForEach(ActionMode.customActions,id:\.self){Text($0.label).tag($0)};Divider();Section("macOS actions"){ForEach(ActionMode.macOSActions,id:\.self){Text($0.label).tag($0)}};Divider();Section("Figma"){ForEach(ActionMode.figmaActions,id:\.self){Text($0.label).tag($0)}};Divider();Section("ThumbKey"){ForEach(ActionMode.thumbKeyActions,id:\.self){Text($0.label).tag($0)}}}.labelsHidden();Text(model.button.mode.explanation).font(.callout).foregroundStyle(.secondary)}
             if model.button.mode == .showShortcuts {
                 Button("Preview shortcut overlay"){model.toggleShortcutOverlay()}
             }
             if let chord=model.button.mode.presetChord {
                 VStack(alignment:.leading,spacing:8){
-                    HStack{Text("Shortcut sent once per press").font(.subheadline.weight(.medium));Spacer();Text(chord.label).font(.body.monospaced()).padding(.horizontal,10).padding(.vertical,5).background(Color.primary.opacity(0.06),in:RoundedRectangle(cornerRadius:6))}
+                    HStack{Text(model.button.mode.holdsKeys ? "Keys held while the button is down":"Shortcut sent once per press").font(.subheadline.weight(.medium));Spacer();Text(chord.label).font(.body.monospaced()).padding(.horizontal,10).padding(.vertical,5).background(Color.primary.opacity(0.06),in:RoundedRectangle(cornerRadius:6))}
                     Button(model.testingShortcut ? "Testing…":"Test " + model.button.mode.label){model.testShortcut()}
                         .disabled(model.testingShortcut || !model.accessibilityAllowed || model.secureInputBlocked)
-                    Text("Uses the standard macOS shortcut. Enable it in System Settings → Keyboard → Keyboard Shortcuts → Mission Control. If you changed the keys there, choose Press a shortcut once to use your custom keys.").font(.caption).foregroundStyle(.secondary)
+                    if model.button.mode == .figmaPan {
+                        Text("The test holds Space for three seconds. For normal use, hold the assigned mouse button while left-clicking and dragging the canvas. Use a Figma app profile to keep this assignment specific to Figma.").font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("Uses the standard macOS shortcut. Enable it in System Settings → Keyboard → Keyboard Shortcuts → Mission Control. If you changed the keys there, choose Press a shortcut once to use your custom keys.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             if model.button.mode == .shortcut || model.button.mode == .hold {

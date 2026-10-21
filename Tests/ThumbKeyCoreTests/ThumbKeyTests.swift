@@ -104,6 +104,22 @@ final class ThumbKeyTests:XCTestCase {
         let decoded=try JSONDecoder().decode(Configuration.self,from:JSONEncoder().encode(config)).validated()
         XCTAssertEqual(decoded,config)
     }
+    func testFigmaPanPresetPersistsHoldAndShowsInShortcutReference()throws{
+        var config=Configuration()
+        let custom=Chord(keyCode:2,modifiers:.control,keyLabel:"D")
+        config.profiles[0].buttons[3].chord=custom
+        config.profiles[0].buttons[3].mode = .figmaPan
+        let decoded=try JSONDecoder().decode(Configuration.self,from:JSONEncoder().encode(config)).validated()
+        let button=decoded.profiles[0].buttons[3]
+        XCTAssertTrue(button.mode.holdsKeys)
+        XCTAssertEqual(button.effectiveChord.keys,[49])
+        XCTAssertEqual(button.detail,"Hold Space")
+        XCTAssertEqual(button.chord,custom)
+        let reference=try XCTUnwrap(ShortcutReference.configured(in:decoded.profiles[0],family:.naga,plate:.twelve).first{$0.id==4})
+        XCTAssertEqual(reference.actionName,"Pan canvas (hold Space)")
+        XCTAssertEqual(reference.keys,"Hold Space")
+        XCTAssertFalse(ActionMode.missionControl.holdsKeys)
+    }
     func testExistingMappingsDecodeWithoutAnyPresetOrShortcutChange()throws{
         let original=Configuration()
         let data=try JSONEncoder().encode(original)
@@ -113,7 +129,7 @@ final class ThumbKeyTests:XCTestCase {
             XCTAssertNil(button.mode.presetChord)
             XCTAssertEqual(button.effectiveChord,button.chord)
         }}
-        XCTAssertEqual(Set(ActionMode.customActions+ActionMode.macOSActions+ActionMode.thumbKeyActions),Set(ActionMode.allCases))
+        XCTAssertEqual(Set(ActionMode.customActions+ActionMode.macOSActions+ActionMode.figmaActions+ActionMode.thumbKeyActions),Set(ActionMode.allCases))
     }
     func testNewSelectionAndPauseInvalidatePendingHardwareWork(){
         let requests=RequestGeneration()

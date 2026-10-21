@@ -20,6 +20,8 @@ Click the key recorder and press a combination on your regular keyboard. For a m
 
 The **Action** menu also includes named **macOS actions**: Mission Control (Control–↑), App Exposé (Control–↓), Show Desktop (F11), Previous Desktop (Control–←), and Next Desktop (Control–→). These send the standard shortcut once per press, show the action name in the mapping view, and provide a test button without recording any keys. Existing custom names and saved shortcuts are preserved. The corresponding shortcut must be enabled in System Settings → Keyboard → Keyboard Shortcuts → Mission Control. If you customized those system keys, use **Press a shortcut once** with your chosen combination instead.
 
+**Action → Figma → Pan canvas (hold Space)** holds Space until the mouse button is released. In Figma, hold that button and left-click-drag to move the canvas; releasing restores the previous tool. Click the canvas first if text editing has focus. Add a Figma app profile before assigning it if you want the button to keep its other action in other apps. You can also record Space using **Hold keys while pressed**.
+
 **Fill in a dictation shortcut** offers two presets. These fill in keys; they do not launch or configure the other app:
 
 - **Superwhispr**: hold Right Command. Select Right Command as the push-to-talk key in Superwhispr too.

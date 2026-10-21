@@ -96,8 +96,8 @@ final class ActionRunner {
         case .passthrough:
             if let code=KeyboardMap.usageToKey[usage]{let owner=UUID();held[usage]=owner;press(Chord(keyCode:code),owner:owner)}
             else{report("This original key cannot be forwarded. Assign it a hotkey instead.")}
-        case .hold:
-            let owner=UUID();held[usage]=owner;press(binding.chord,owner:owner)
+        case .hold,.figmaPan:
+            let owner=UUID();held[usage]=owner;press(binding.effectiveChord,owner:owner)
         case .shortcut:tap(binding.chord)
         case .missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop:
             tap(binding.effectiveChord,at:.cghidEventTap,keyFlags:CGEventFlags(rawValue:binding.mode.presetKeyFlags))
