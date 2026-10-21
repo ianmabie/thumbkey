@@ -28,6 +28,29 @@ final class ActionRunnerTests:XCTestCase {
         XCTAssertEqual(output.keys.map(\.down),[true,false,true,false])
         XCTAssertTrue(output.keys.allSatisfy{$0.code==8 && $0.flags==0 && $0.location==CGEventTapLocation.cgSessionEventTap.rawValue})
     }
+    func testFigmaZoomStepsTapCommandKeysAndScrollZoomReleasesItsModifier(){
+        let output=Recorder(),runner=ActionRunner(keyOutput:{output.add($0,$1,$2,$3)},physicalFlags:{0},foregroundPID:{1})
+        runner.setPhysicalEnabled(true)
+        let stale=Chord(keyCode:2,modifiers:.control,keyLabel:"D")
+        for (usage,mode):(UInt32,ActionMode) in [(35,.figmaZoomIn),(36,.figmaZoomOut)]{
+            runner.physicalInput(usage,down:true,binding:binding(6,mode,stale))
+            runner.physicalInput(usage,down:false,binding:nil)
+        }
+        runner.finishStopping()
+        XCTAssertEqual(output.keys.map(\.code),[55,24,24,55,55,27,27,55])
+        XCTAssertEqual(output.keys.map(\.down),[true,true,false,false,true,true,false,false])
+        for key in output.keys where key.code != 55{XCTAssertTrue(CGEventFlags(rawValue:key.flags).contains(.maskCommand))}
+        let scroll=binding(8,.figmaZoomScroll,stale)
+        runner.physicalInput(37,down:true,binding:scroll);runner.finishStopping()
+        XCTAssertEqual(output.keys.count,9);XCTAssertEqual(output.keys.last?.code,55);XCTAssertEqual(output.keys.last?.down,true)
+        runner.physicalInput(37,down:false,binding:nil);runner.finishStopping()
+        XCTAssertEqual(output.keys.last?.down,false)
+        runner.physicalInput(37,down:true,binding:scroll);runner.finishStopping()
+        runner.setPhysicalEnabled(false);runner.finishStopping()
+        XCTAssertEqual(output.keys.suffix(4).map(\.code),[55,55,55,55])
+        XCTAssertEqual(output.keys.suffix(4).map(\.down),[true,false,true,false])
+        XCTAssertEqual(output.keys.last?.flags,0)
+    }
     func testFigmaPanHoldsSpaceUntilReleaseAndPauseClearsIt(){
         let output=Recorder(),runner=ActionRunner(keyOutput:{output.add($0,$1,$2,$3)},physicalFlags:{0},foregroundPID:{1})
         // A previous custom shortcut must not replace the preset's Space key.

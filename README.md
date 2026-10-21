@@ -24,6 +24,13 @@ The **Action** menu also includes named **macOS actions**: Mission Control (Cont
 
 **Action → Figma → Add comment (C)** sends C once to enter [Figma’s comment mode](https://help.figma.com/hc/en-us/articles/360041068574-Add-comments-to-files). Click the canvas where you want the comment, then type your message. Press Escape to leave comment mode. Click the canvas first if a text field is focused; use a Figma app profile to limit this assignment to Figma.
 
+**Action → Figma** also includes three canvas zoom presets:
+
+- **Zoom with scroll wheel (hold ⌘)**: hold one assigned mouse button and scroll over the canvas in either direction. Releasing the button restores normal scrolling.
+- **Zoom in** and **Zoom out**: send Command–plus or Command–minus once per press; assign each direction to its own button.
+
+These use [Figma’s canvas zoom controls](https://help.figma.com/hc/en-us/articles/360041065034-Adjust-your-zoom-and-view-options). Use a Figma app profile if you want other apps to keep their current assignments.
+
 **Fill in a dictation shortcut** offers two presets. These fill in keys; they do not launch or configure the other app:
 
 - **Superwhispr**: hold Right Command. Select Right Command as the push-to-talk key in Superwhispr too.

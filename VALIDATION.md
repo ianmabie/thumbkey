@@ -1,3 +1,10 @@
+Figma zoom presets, version 0.3.0 build 34 (October 20, 2026):
+
+- Added Action → Figma → Zoom with scroll wheel (hold ⌘), Zoom in, and Zoom out. The first holds Left Command until button-up so one button plus the physical wheel covers both directions. The other two tap Command–plus (the equals key) and Command–minus once per press. The editor distinguishes held vs. one-shot behavior and explains Figma app profiles. Saved custom chords remain intact when switching preset modes.
+- Verified the installed Figma canvas menu labels Command–plus and Command–minus. Native keyboard checks changed canvas zoom from 234% to 400% and then 200%; restored 234% afterward. No document content was edited. Figma’s official zoom guide confirms Command plus mouse-wheel scrolling. These checks establish the keyboard shortcuts; physical mouse-button-plus-wheel delivery still requires hands-on testing.
+- All 52 tests pass (42 core, 10 runtime). Coverage includes preset persistence/reference display with stale custom keys, correct zoom key pairs/modifiers, holding Command until button release, releasing on pause, and existing input/cancellation regressions. Runtime output checks use injected sinks without posting real keystrokes.
+- Signed build 34 installed/relaunched with mappings on, previous app/configuration saved outside the repository, and strict signature verification passing. Native inspection confirms all three zoom choices in the Action menu alongside Pan canvas and Add comment. Canceled without assigning an action. The saved bindings equal the pre-install snapshot.
+
 Separate button-map views, version 0.3.0 build 33 (October 20, 2026):
 
 - Added a pinned 3D view / List view switch above the left pane. The full model and button rows are mutually exclusive; only the small device selector thumbnails remain in both modes. List mode shows labeled rows with custom names, action detail, selection border, and checkmark. Both views share the same selected button and editor. View changes start at the top of their content and the preference persists across relaunches.

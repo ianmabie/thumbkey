@@ -83,7 +83,7 @@ final class ThumbKeyTests:XCTestCase {
     func testNamedTapPresetsOverrideStaleKeysAndPreserveCustomShortcut()throws{
         let expected:[(ActionMode,UInt16,Modifiers,String)] = [
             (.missionControl,126,.control,"Mission Control"),(.appExpose,125,.control,"App Exposé"),
-            (.showDesktop,103,[],"Show Desktop"),(.previousDesktop,123,.control,"Previous Desktop"),(.nextDesktop,124,.control,"Next Desktop"),(.figmaComment,8,[],"Add comment (C)")
+            (.showDesktop,103,[],"Show Desktop"),(.previousDesktop,123,.control,"Previous Desktop"),(.nextDesktop,124,.control,"Next Desktop"),(.figmaComment,8,[],"Add comment (C)"),(.figmaZoomIn,24,.command,"Zoom in"),(.figmaZoomOut,27,.command,"Zoom out")
         ]
         let custom=Chord(keyCode:2,modifiers:.control,keyLabel:"D")
         var config=Configuration()
@@ -123,6 +123,19 @@ final class ThumbKeyTests:XCTestCase {
         XCTAssertEqual(reference.actionName,"Pan canvas (hold Space)")
         XCTAssertEqual(reference.keys,"Hold Space")
         XCTAssertFalse(ActionMode.missionControl.holdsKeys)
+    }
+    func testFigmaScrollZoomPresetPersistsCommandHoldAndReference()throws{
+        var config=Configuration()
+        config.profiles[0].buttons[5].mode = .figmaZoomScroll
+        config.profiles[0].buttons[5].chord=Chord(keyCode:2,modifiers:.control,keyLabel:"D")
+        let decoded=try JSONDecoder().decode(Configuration.self,from:JSONEncoder().encode(config)).validated()
+        let button=decoded.profiles[0].buttons[5]
+        XCTAssertTrue(button.mode.holdsKeys)
+        XCTAssertEqual(button.effectiveChord.keys,[55])
+        XCTAssertEqual(button.detail,"Hold ⌘ + scroll")
+        let reference=try XCTUnwrap(ShortcutReference.configured(in:decoded.profiles[0],family:.naga,plate:.twelve).first{$0.id==6})
+        XCTAssertEqual(reference.keys,"Hold ⌘")
+        XCTAssertEqual(reference.actionName,"Zoom with scroll wheel (hold ⌘)")
     }
     func testExistingMappingsDecodeWithoutAnyPresetOrShortcutChange()throws{
         let original=Configuration()

@@ -18,7 +18,7 @@ public struct ShortcutReference:Identifiable,Equatable {
     public var keys:String {
         switch binding.mode {
         case .shortcut:return binding.chord.label
-        case .hold,.figmaPan:return "Hold " + binding.effectiveChord.label
+        case .hold,.figmaPan,.figmaZoomScroll:return "Hold " + binding.effectiveChord.label
         case .macro:return binding.detail
         case .showShortcuts:return "Toggle overlay"
         default:return binding.effectiveChord.label
