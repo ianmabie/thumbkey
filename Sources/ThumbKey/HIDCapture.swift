@@ -42,6 +42,7 @@ final class HIDCapture {
     var onDevices:(([NagaInterface])->Void)?
     var onInput:((UInt32,Bool,ButtonBinding?,Bool)->Void)?
     var onActionInput:((UInt32,Bool,ButtonBinding?)->Void)?
+    var onPointerMotion:((CGEvent)->Void)?
     var onReset:(()->Void)?
     var onHardwarePress:((UInt32)->Void)?
     var onError:((String)->Void)?
@@ -99,7 +100,7 @@ final class HIDCapture {
         stop()
         for id in interfaces.keys.sorted(){if !open(id){stop();return false}}
         guard capturedCount>0 else{stop();onError?("No supported mouse is connected.");return false}
-        let mask=(1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.otherMouseUp.rawValue)
+        let mask=(1 << CGEventType.mouseMoved.rawValue) | (1 << CGEventType.otherMouseDragged.rawValue) | (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.otherMouseUp.rawValue)
         let current=UUID()
         let context=TapContext(owner:self,generation:current)
         guard let port=CGEvent.tapCreate(tap:.cghidEventTap,place:.headInsertEventTap,options:.defaultTap,eventsOfInterest:CGEventMask(mask),callback:{_,type,event,context in
@@ -201,6 +202,9 @@ final class HIDCapture {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput{
             DispatchQueue.main.async{[weak self] in guard let self,self.isCurrent(current) else{return};self.stop();self.onDisconnect?("macOS disabled the keyboard filter.")}
             return Unmanaged.passUnretained(event)
+        }
+        if type == .mouseMoved || type == .otherMouseDragged {
+            onPointerMotion?(event);return Unmanaged.passUnretained(event)
         }
         let mouse=type == .otherMouseDown || type == .otherMouseUp
         guard mouse || type == .keyDown || type == .keyUp,event.getIntegerValueField(.eventSourceUserData) != 0x54484D424B4559 else{return Unmanaged.passUnretained(event)}

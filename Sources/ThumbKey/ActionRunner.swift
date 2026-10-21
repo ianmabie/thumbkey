@@ -4,10 +4,15 @@ import ThumbKeyCore
 /// Key ownership and posting stay on one serial queue, independent of AppKit's
 /// run loop (which can stall while Mission Control animates).
 final class ActionRunner {
+    typealias MouseOutput=(Bool,CGPoint,CGEventFlags)->Void
     typealias KeyOutput=(UInt16,Bool,CGEventTapLocation,CGEventFlags)->Void
     private let queue=DispatchQueue(label:"personal.thumbkey.actions",qos:.userInteractive)
     private let lifetime=RequestGeneration()
     private let keyOutput:KeyOutput?
+    private let mouseOutput:MouseOutput?
+    private let pointerLocation:()->CGPoint
+    private let dragLock=NSLock()
+    private var dragOwners=Set<UUID>()
     private let textOutput:((String)->Void)?
     private let physicalFlags:()->UInt64
     private let foregroundPID:()->pid_t?
@@ -19,10 +24,11 @@ final class ActionRunner {
     private var suspended=false,physicalEnabled=false
     var status:((String)->Void)?
     var showShortcuts:(()->Void)?
-    init(keyOutput:KeyOutput?=nil,textOutput:((String)->Void)?=nil,
+    init(keyOutput:KeyOutput?=nil,mouseOutput:MouseOutput?=nil,
+         pointerLocation:@escaping()->CGPoint={CGEvent(source:nil)?.location ?? .zero},textOutput:((String)->Void)?=nil,
          physicalFlags:@escaping()->UInt64={CGEventSource.flagsState(.hidSystemState).rawValue},
          foregroundPID:@escaping()->pid_t?={NSWorkspace.shared.frontmostApplication?.processIdentifier}){
-        self.keyOutput=keyOutput;self.textOutput=textOutput
+        self.keyOutput=keyOutput;self.mouseOutput=mouseOutput;self.pointerLocation=pointerLocation;self.textOutput=textOutput
         self.physicalFlags=physicalFlags;self.foregroundPID=foregroundPID
     }
     var suspend:Bool {
@@ -45,6 +51,39 @@ final class ActionRunner {
     // Explicit UI tests are available even while physical mappings are paused.
     func down(_ usage:UInt32,binding:ButtonBinding?){submit{request in self.pressButton(usage,binding:binding,request:request)}}
     func up(_ usage:UInt32){submit{_ in self.releaseButton(usage)}}
+    // Movement must be a drag event even when the hardware emits ordinary motion.
+    // This lock never waits on the action queue or main run loop.
+    func routePointerMotion(_ event:CGEvent){
+        guard event.type == .mouseMoved || event.type == .otherMouseDragged else{return}
+        dragLock.lock();let dragging = !dragOwners.isEmpty;dragLock.unlock()
+        if dragging{event.type = .leftMouseDragged;event.setIntegerValueField(.mouseEventButtonNumber,value:0)}
+    }
+    func cancelCanvasDrag(){submit{_ in
+        for usage in Array(self.held.keys){
+            guard let owner=self.held[usage] else{continue}
+            self.dragLock.lock();let dragging=self.dragOwners.contains(owner);self.dragLock.unlock()
+            if dragging{self.releaseButton(usage)}
+        }
+    }}
+    private func mouse(_ down:Bool){
+        let point=pointerLocation()
+        let flags=CGEventFlags(rawValue:ModifierKey.flags(physical:physicalFlags(),pressed:postedKeys))
+        if let mouseOutput{mouseOutput(down,point,flags);return}
+        guard let event=CGEvent(mouseEventSource:nil,mouseType:down ? .leftMouseDown:.leftMouseUp,mouseCursorPosition:point,mouseButton:.left) else{return}
+        event.flags=flags
+        event.setIntegerValueField(.mouseEventClickState,value:1)
+        event.setDoubleValueField(.mouseEventPressure,value:down ? 1:0)
+        event.setIntegerValueField(.eventSourceUserData,value:0x54484D424B4559)
+        event.post(tap:.cgSessionEventTap)
+    }
+    private func beginDrag(owner:UUID){
+        dragLock.lock();let first=dragOwners.isEmpty;dragOwners.insert(owner);dragLock.unlock()
+        if first{mouse(true)}
+    }
+    private func endDrag(owner:UUID){
+        dragLock.lock();let removed=dragOwners.remove(owner) != nil,last=dragOwners.isEmpty;dragLock.unlock()
+        if removed && last{mouse(false)}
+    }
     func cancelAll(){lifetime.next();queue.async{self.clear()}}
     func finishStopping(){queue.sync{}}
     private func report(_ text:String){DispatchQueue.main.async{[weak self] in self?.status?(text)}}
@@ -96,7 +135,9 @@ final class ActionRunner {
         case .passthrough:
             if let code=KeyboardMap.usageToKey[usage]{let owner=UUID();held[usage]=owner;press(Chord(keyCode:code),owner:owner)}
             else{report("This original key cannot be forwarded. Assign it a hotkey instead.")}
-        case .hold,.figmaPan,.figmaZoomScroll:
+        case .figmaPan:
+            let owner=UUID();held[usage]=owner;press(binding.effectiveChord,owner:owner);beginDrag(owner:owner)
+        case .hold,.figmaZoomScroll:
             let owner=UUID();held[usage]=owner;press(binding.effectiveChord,owner:owner)
         case .shortcut,.figmaComment,.figmaZoomIn,.figmaZoomOut:tap(binding.effectiveChord)
         case .missionControl,.appExpose,.showDesktop,.previousDesktop,.nextDesktop:
@@ -124,10 +165,13 @@ final class ActionRunner {
     }
     private func releaseButton(_ usage:UInt32){
         watchdogs.removeValue(forKey:usage)?.cancel()
-        if let owner=held.removeValue(forKey:usage){release(owner)}
+        if let owner=held.removeValue(forKey:usage){endDrag(owner:owner);release(owner)}
     }
     private func clear(){
-        macros.removeAll();watchdogs.values.forEach{$0.cancel()};watchdogs.removeAll();held.removeAll()
+        macros.removeAll();watchdogs.values.forEach{$0.cancel()};watchdogs.removeAll()
+        dragLock.lock();let dragging = !dragOwners.isEmpty;dragOwners.removeAll();dragLock.unlock()
+        if dragging{mouse(false)}
+        held.removeAll()
         for key in ownership.releaseAll(){post(key,down:false)}
     }
 }

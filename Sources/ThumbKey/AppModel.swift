@@ -75,6 +75,7 @@ final class AppModel: ObservableObject {
         hardware.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted) }
         capture.onInput={ [weak self] usage,down,binding,intercepted in self?.received(usage:usage,down:down,binding:binding,intercepted:intercepted,actionDelivered:true) }
         capture.onActionInput={ [weak runner] usage,down,binding in runner?.physicalInput(usage,down:down,binding:binding) }
+        capture.onPointerMotion={ [weak runner] event in runner?.routePointerMotion(event) }
         capture.onReset={ [weak runner] in runner?.cancelAll() }
         capture.onDisconnect={ [weak self] reason in self?.interrupted(reason) }
         capture.onError={ [weak self] text in self?.message=text }
@@ -85,7 +86,7 @@ final class AppModel: ObservableObject {
         shortcutOverlay.onDismiss={ [weak self] in self?.shortcutOverlayVisible=false }
         refreshActiveApplication()
         updateDevices(capture.deviceList); refreshPermissions();updateRouting()
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didActivateApplicationNotification,object:nil,queue:.main){[weak self] _ in self?.refreshActiveApplication();self?.updateRouting()})
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didActivateApplicationNotification,object:nil,queue:.main){[weak self] _ in self?.runner.cancelCanvasDrag();self?.refreshActiveApplication();self?.updateRouting()})
         permissionTimer=Timer.scheduledTimer(withTimeInterval:2,repeats:true){[weak self] _ in self?.refreshPermissions()}
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main){[weak self] _ in
             guard let self else{return};self.recovery.sleep();self.stopCapture();self.message=self.wantsMappings ? "Paused for sleep. Mappings will resume after wake.":"Mappings paused. Side buttons send their original keys."
@@ -325,7 +326,7 @@ final class AppModel: ObservableObject {
         if testingShortcut{runner.up(UInt32.max);testingShortcut=false}
     }
     func testShortcut(){
-        guard accessibilityAllowed,!button.effectiveChord.isEmpty,!testingShortcut else{return}
+        guard accessibilityAllowed,!button.effectiveChord.isEmpty,!testingShortcut,button.mode != .figmaPan else{return}
         cancelLearning();runner.cancelAll();runner.suspend=false
         let usage=UInt32.max,binding=button
         testingShortcut=true

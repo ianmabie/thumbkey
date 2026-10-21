@@ -215,11 +215,13 @@ struct ButtonEditor:View {
             }
             if let chord=model.button.mode.presetChord {
                 VStack(alignment:.leading,spacing:8){
-                    HStack{Text(model.button.mode.holdsKeys ? "Keys held while the button is down":"Shortcut sent once per press").font(.subheadline.weight(.medium));Spacer();Text(chord.label).font(.body.monospaced()).padding(.horizontal,10).padding(.vertical,5).background(Color.primary.opacity(0.06),in:RoundedRectangle(cornerRadius:6))}
-                    Button(model.testingShortcut ? "Testing…":"Test " + model.button.mode.label){model.testShortcut()}
-                        .disabled(model.testingShortcut || !model.accessibilityAllowed || model.secureInputBlocked)
+                    HStack{Text(model.button.mode.holdsKeys ? "Keys held while the button is down":"Shortcut sent once per press").font(.subheadline.weight(.medium));Spacer();Text(model.button.mode == .figmaPan ? "Space + left mouse":chord.label).font(.body.monospaced()).padding(.horizontal,10).padding(.vertical,5).background(Color.primary.opacity(0.06),in:RoundedRectangle(cornerRadius:6))}
+                    if model.button.mode != .figmaPan {
+                        Button(model.testingShortcut ? "Testing…":"Test " + model.button.mode.label){model.testShortcut()}
+                            .disabled(model.testingShortcut || !model.accessibilityAllowed || model.secureInputBlocked)
+                    }
                     if model.button.mode == .figmaPan {
-                        Text("The test holds Space for three seconds. For normal use, hold the assigned mouse button while left-clicking and dragging the canvas. Use a Figma app profile to keep this assignment specific to Figma.").font(.caption).foregroundStyle(.secondary)
+                        Text("Try it over Figma’s canvas: hold the assigned button and move the mouse. Release to stop. No separate click is needed. Switching apps or pausing mappings also ends the drag. Use a Figma app profile to keep this assignment specific to Figma.").font(.caption).foregroundStyle(.secondary)
                     } else if model.button.mode == .figmaComment {
                         Text("Sends C once to enter comment mode. In Figma, click the canvas to place your comment, then type your message. Use a Figma app profile to keep this assignment specific to Figma.").font(.caption).foregroundStyle(.secondary)
                     } else if model.button.mode == .figmaZoomScroll {

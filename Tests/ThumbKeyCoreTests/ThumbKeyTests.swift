@@ -117,11 +117,11 @@ final class ThumbKeyTests:XCTestCase {
         let button=decoded.profiles[0].buttons[3]
         XCTAssertTrue(button.mode.holdsKeys)
         XCTAssertEqual(button.effectiveChord.keys,[49])
-        XCTAssertEqual(button.detail,"Hold Space")
+        XCTAssertEqual(button.detail,"Hold Space + left mouse")
         XCTAssertEqual(button.chord,custom)
         let reference=try XCTUnwrap(ShortcutReference.configured(in:decoded.profiles[0],family:.naga,plate:.twelve).first{$0.id==4})
-        XCTAssertEqual(reference.actionName,"Pan canvas (hold Space)")
-        XCTAssertEqual(reference.keys,"Hold Space")
+        XCTAssertEqual(reference.actionName,"Drag canvas (hold button)")
+        XCTAssertEqual(reference.keys,"Hold Space + left mouse")
         XCTAssertFalse(ActionMode.missionControl.holdsKeys)
     }
     func testFigmaScrollZoomPresetPersistsCommandHoldAndReference()throws{

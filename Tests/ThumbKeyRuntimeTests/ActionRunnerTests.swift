@@ -51,22 +51,62 @@ final class ActionRunnerTests:XCTestCase {
         XCTAssertEqual(output.keys.suffix(4).map(\.down),[true,false,true,false])
         XCTAssertEqual(output.keys.last?.flags,0)
     }
-    func testFigmaPanHoldsSpaceUntilReleaseAndPauseClearsIt(){
-        let output=Recorder(),runner=ActionRunner(keyOutput:{output.add($0,$1,$2,$3)},physicalFlags:{0},foregroundPID:{1})
-        // A previous custom shortcut must not replace the preset's Space key.
+    func testFigmaPanPressReleaseOrderingMovementAndPauseCleanup()throws{
+        let lock=NSLock();var sequence=[String]()
+        func append(_ value:String){lock.lock();sequence.append(value);lock.unlock()}
+        func events()->[String]{lock.lock();defer{lock.unlock()};return sequence}
+        let point=CGPoint(x:120,y:240)
+        let runner=ActionRunner(keyOutput:{code,down,_,_ in append("key \(code) \(down)")},
+            mouseOutput:{down,location,flags in
+                XCTAssertEqual(location,point);XCTAssertEqual(flags.rawValue,0);append("mouse \(down)")
+            },pointerLocation:{point},physicalFlags:{0},foregroundPID:{1})
         let pan=binding(4,.figmaPan,Chord(keyCode:2,modifiers:.control,keyLabel:"D"))
         runner.setPhysicalEnabled(true)
         runner.physicalInput(33,down:true,binding:pan);runner.finishStopping()
-        XCTAssertEqual(output.keys.map(\.code),[49]);XCTAssertEqual(output.keys.map(\.down),[true])
+        XCTAssertEqual(events(),["key 49 true","mouse true"])
         runner.physicalInput(33,down:true,binding:pan);runner.finishStopping()
-        XCTAssertEqual(output.keys.count,1)
+        XCTAssertEqual(events().count,2)
+        let motion=try XCTUnwrap(CGEvent(mouseEventSource:nil,mouseType:.mouseMoved,mouseCursorPosition:point,mouseButton:.left))
+        motion.setIntegerValueField(.mouseEventDeltaX,value:12);motion.setIntegerValueField(.mouseEventDeltaY,value:-7)
+        runner.routePointerMotion(motion)
+        XCTAssertEqual(motion.type,.leftMouseDragged);XCTAssertEqual(motion.location,point)
+        XCTAssertEqual(motion.getIntegerValueField(.mouseEventButtonNumber),0)
+        XCTAssertEqual(motion.getIntegerValueField(.mouseEventDeltaX),12);XCTAssertEqual(motion.getIntegerValueField(.mouseEventDeltaY),-7)
         runner.physicalInput(33,down:false,binding:nil);runner.finishStopping()
-        XCTAssertEqual(output.keys.map(\.down),[true,false])
+        XCTAssertEqual(events(),["key 49 true","mouse true","mouse false","key 49 false"])
+        motion.type = .mouseMoved;runner.routePointerMotion(motion);XCTAssertEqual(motion.type,.mouseMoved)
         runner.physicalInput(33,down:true,binding:pan);runner.finishStopping()
         runner.setPhysicalEnabled(false);runner.finishStopping()
-        XCTAssertEqual(output.keys.map(\.code),[49,49,49,49])
-        XCTAssertEqual(output.keys.map(\.down),[true,false,true,false])
-        XCTAssertTrue(output.keys.allSatisfy{$0.flags==0 && $0.location==CGEventTapLocation.cgSessionEventTap.rawValue})
+        XCTAssertEqual(Array(events().suffix(4)),["key 49 true","mouse true","mouse false","key 49 false"])
+        runner.cancelAll();runner.finishStopping();XCTAssertEqual(events().count,8)
+    }
+    func testFigmaPanSharedOwnersRapidPressesAndAppSwitchDoNotReleaseOtherHolds()throws{
+        let output=Recorder(),lock=NSLock();var mouse=[Bool]()
+        let runner=ActionRunner(keyOutput:{output.add($0,$1,$2,$3)},mouseOutput:{down,_,_ in
+            lock.lock();mouse.append(down);lock.unlock()
+        },pointerLocation:{.zero},physicalFlags:{0},foregroundPID:{1})
+        func clicks()->[Bool]{lock.lock();defer{lock.unlock()};return mouse}
+        let pan=binding(4,.figmaPan)
+        runner.setPhysicalEnabled(true)
+        runner.physicalInput(30,down:true,binding:binding(1,.hold,Chord(keyCode:2,modifiers:.control,keyLabel:"D")))
+        runner.physicalInput(33,down:true,binding:pan);runner.physicalInput(34,down:true,binding:pan)
+        runner.physicalInput(33,down:false,binding:nil);runner.finishStopping()
+        XCTAssertEqual(clicks(),[true])
+        runner.cancelCanvasDrag();runner.finishStopping()
+        XCTAssertEqual(clicks(),[true,false]);XCTAssertEqual(output.keys.last?.code,49);XCTAssertEqual(output.keys.last?.down,false)
+        XCTAssertEqual(output.keys.filter{[59,2].contains($0.code)}.map(\.down),[true,true])
+        runner.physicalInput(34,down:false,binding:nil);runner.finishStopping();XCTAssertEqual(clicks(),[true,false])
+        for _ in 0..<100 {
+            runner.physicalInput(33,down:true,binding:pan);runner.physicalInput(33,down:false,binding:nil)
+        }
+        runner.finishStopping()
+        runner.physicalInput(33,down:true,binding:pan);runner.finishStopping()
+        runner.cancelAll();runner.finishStopping()
+        let clicks=clicks();XCTAssertEqual(clicks.count,204)
+        XCTAssertTrue(stride(from:0,to:clicks.count,by:2).allSatisfy{clicks[$0] && !clicks[$0+1]})
+        XCTAssertEqual(output.keys.filter{[2,59].contains($0.code)}.map(\.down),[true,true,false,false])
+        let motion=try XCTUnwrap(CGEvent(mouseEventSource:nil,mouseType:.otherMouseDragged,mouseCursorPosition:.zero,mouseButton:.center))
+        runner.routePointerMotion(motion);XCTAssertEqual(motion.type,.otherMouseDragged)
     }
     func testCompleteMacroDeliversShortcutThenTextInOrder() {
         let done=expectation(description:"text after shortcut"),output=Recorder()
