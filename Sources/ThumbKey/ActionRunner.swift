@@ -19,11 +19,13 @@ final class ActionRunner {
     private var ownership=KeyOwnership()
     private var held=[UInt32:UUID]()
     private var macros=[UInt32:UUID]()
+    private var overlayHolds=Set<UInt32>()
+    private let overlayTransition=RequestGeneration()
     private var watchdogs=[UInt32:DispatchWorkItem]()
     private var postedKeys=Set<UInt16>()
     private var suspended=false,physicalEnabled=false
     var status:((String)->Void)?
-    var showShortcuts:(()->Void)?
+    var shortcutsHeldChanged:((Bool)->Void)?
     init(keyOutput:KeyOutput?=nil,mouseOutput:MouseOutput?=nil,
          pointerLocation:@escaping()->CGPoint={CGEvent(source:nil)?.location ?? .zero},textOutput:((String)->Void)?=nil,
          physicalFlags:@escaping()->UInt64={CGEventSource.flagsState(.hidSystemState).rawValue},
@@ -86,6 +88,13 @@ final class ActionRunner {
     }
     func cancelAll(){lifetime.next();queue.async{self.clear()}}
     func finishStopping(){queue.sync{}}
+    private func reportOverlay(_ visible:Bool,request:UUID){
+        let transition=overlayTransition.next()
+        DispatchQueue.main.async{[weak self] in
+            guard let self,self.overlayTransition.matches(transition),!visible || self.lifetime.matches(request) else{return}
+            self.shortcutsHeldChanged?(visible)
+        }
+    }
     private func report(_ text:String){DispatchQueue.main.async{[weak self] in self?.status?(text)}}
     private func post(_ code:UInt16,down:Bool,at location:CGEventTapLocation = .cgSessionEventTap,keyFlags:CGEventFlags=[]){
         if down{postedKeys.insert(code)}else{postedKeys.remove(code)}
@@ -126,12 +135,13 @@ final class ActionRunner {
         }
     }
     private func pressButton(_ usage:UInt32,binding:ButtonBinding?,request:UUID){
-        guard !suspended,held[usage]==nil,macros[usage]==nil else{return}
+        guard !suspended,held[usage]==nil,macros[usage]==nil,!overlayHolds.contains(usage) else{return}
         let binding=binding ?? ButtonBinding(id:0,usage:usage)
         switch binding.mode {
         case .disabled:break
         case .showShortcuts:
-            DispatchQueue.main.async{[weak self] in guard let self,self.lifetime.matches(request) else{return};self.showShortcuts?()}
+            let first=overlayHolds.isEmpty;overlayHolds.insert(usage)
+            if first{reportOverlay(true,request:request)}
         case .passthrough:
             if let code=KeyboardMap.usageToKey[usage]{let owner=UUID();held[usage]=owner;press(Chord(keyCode:code),owner:owner)}
             else{report("This original key cannot be forwarded. Assign it a hotkey instead.")}
@@ -165,9 +175,11 @@ final class ActionRunner {
     }
     private func releaseButton(_ usage:UInt32){
         watchdogs.removeValue(forKey:usage)?.cancel()
+        if overlayHolds.remove(usage) != nil,overlayHolds.isEmpty{reportOverlay(false,request:lifetime.current())}
         if let owner=held.removeValue(forKey:usage){endDrag(owner:owner);release(owner)}
     }
     private func clear(){
+        if !overlayHolds.isEmpty{overlayHolds.removeAll();reportOverlay(false,request:lifetime.current())}
         macros.removeAll();watchdogs.values.forEach{$0.cancel()};watchdogs.removeAll()
         dragLock.lock();let dragging = !dragOwners.isEmpty;dragOwners.removeAll();dragLock.unlock()
         if dragging{mouse(false)}

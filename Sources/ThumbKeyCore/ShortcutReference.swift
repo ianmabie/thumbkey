@@ -21,7 +21,7 @@ public struct ShortcutReference:Identifiable,Equatable {
         case .figmaPan:return "Hold Space + left mouse"
         case .hold,.figmaZoomScroll:return "Hold " + binding.effectiveChord.label
         case .macro:return binding.detail
-        case .showShortcuts:return "Toggle overlay"
+        case .showShortcuts:return "Hold to view"
         default:return binding.effectiveChord.label
         }
     }

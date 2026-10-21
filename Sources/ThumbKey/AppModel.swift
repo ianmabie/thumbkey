@@ -82,7 +82,7 @@ final class AppModel: ObservableObject {
         capture.onPlateSignal={ [weak self] signal in self?.lastPlateSignal=signal }
         capture.onActivity={ [weak self] in self?.noteNagaActivity();self?.checkExtraButtonMode() }
         runner.status={ [weak self] text in self?.message=text }
-        runner.showShortcuts={ [weak self] in self?.toggleShortcutOverlay() }
+        runner.shortcutsHeldChanged={ [weak self] held in self?.setShortcutOverlayHeld(held) }
         shortcutOverlay.onDismiss={ [weak self] in self?.shortcutOverlayVisible=false }
         refreshActiveApplication()
         updateDevices(capture.deviceList); refreshPermissions();updateRouting()
@@ -117,6 +117,11 @@ final class AppModel: ObservableObject {
         return nil
     }
     func shortcutIssue(_ reference:ShortcutReference)->String? {buttonIssue(reference.binding)}
+    private func setShortcutOverlayHeld(_ held:Bool){
+        if !held{shortcutOverlay.dismiss();return}
+        refreshActiveApplication()
+        shortcutOverlay.show(model:self,whileHeld:true);shortcutOverlayVisible=shortcutOverlay.isVisible
+    }
     func toggleShortcutOverlay(){
         if shortcutOverlay.isVisible{shortcutOverlay.dismiss();return}
         refreshActiveApplication()

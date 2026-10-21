@@ -40,7 +40,7 @@ These use [Figma’s canvas zoom controls](https://help.figma.com/hc/en-us/artic
 
 Open ThumbKey’s menu bar icon to see the configured actions for the active mouse, side plate, and foreground app profile. Each row names the physical button, action, and keys; click a row to edit that mapping. Unassigned, disabled, and unfinished actions are omitted. Macro contents are represented by action counts.
 
-Choose **Action → ThumbKey → Show shortcut overlay** on any button to toggle a floating shortcut reference. The menu bar also offers **Show shortcut overlay**, and the button editor provides a preview. The overlay leaves keyboard focus in the foreground app, follows its profile, and can be closed with the same mouse button, Escape, its close button, or an outside click. Configured extra controls that are unavailable or need identification are labeled accordingly. Pausing or changing mouse capture closes the overlay.
+Choose **Action → ThumbKey → Show shortcut overlay** on any button to show a floating shortcut reference while held. The menu bar also offers **Show shortcut overlay**, and the button editor provides a preview. The overlay leaves keyboard focus in the foreground app, follows its profile, and hides when you release the button. If two overlay buttons are held, it stays visible until both are released; Escape or the close button dismisses early. Menu-bar and editor previews can also be dismissed with an outside click. Configured extra controls that are unavailable or need identification are labeled accordingly. Pausing or changing mouse capture closes the overlay.
 
 ### MX Master 3S
 

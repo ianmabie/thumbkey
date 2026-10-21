@@ -63,7 +63,7 @@ public enum ActionMode: String, Codable, CaseIterable { case passthrough, shortc
     case .showDesktop:return "Move windows aside to show the desktop. Press again to bring them back."
     case .previousDesktop:return "Switch to the desktop or full-screen space on the left."
     case .nextDesktop:return "Switch to the desktop or full-screen space on the right."
-    case .showShortcuts:return "Show the shortcuts for your active mouse, side plate, and app profile. Press again, press Escape, or click outside to close. Your current app keeps keyboard focus."
+    case .showShortcuts:return "Hold this mouse button to see the shortcuts for your active mouse, side plate, and app profile. Release it to hide the overlay. Your current app keeps keyboard focus."
     }}
 }
 public enum StepKind: String, Codable, CaseIterable { case shortcut, text, delay }

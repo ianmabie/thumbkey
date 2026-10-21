@@ -136,13 +136,50 @@ final class ActionRunnerTests:XCTestCase {
     func testCancelledOverlayCannotOpenLaterOnMainQueue() {
         let unexpected=expectation(description:"cancelled overlay");unexpected.isInverted=true
         let runner=ActionRunner(keyOutput:{_,_,_,_ in},physicalFlags:{0},foregroundPID:{1})
-        runner.showShortcuts={unexpected.fulfill()}
+        runner.shortcutsHeldChanged={visible in if visible{unexpected.fulfill()}}
         let sequence={
             runner.down(39,binding:self.binding(10,.showShortcuts));runner.finishStopping()
             runner.cancelAll();runner.finishStopping()
         }
         if Thread.isMainThread{sequence()}else{DispatchQueue.main.sync(execute:sequence)}
         wait(for:[unexpected],timeout:0.05)
+    }
+    func testOverlayHoldsAcrossBothButtonsAndHidesOnLastRelease(){
+        let shown=expectation(description:"shown"),hidden=expectation(description:"hidden")
+        var states=[Bool]()
+        let runner=ActionRunner(keyOutput:{_,_,_,_ in},physicalFlags:{0},foregroundPID:{1})
+        runner.shortcutsHeldChanged={value in states.append(value);if value{shown.fulfill()}else{hidden.fulfill()}}
+        runner.setPhysicalEnabled(true)
+        let ring=InputSource.vendor(0x59)
+        runner.physicalInput(39,down:true,binding:binding(10,.showShortcuts));runner.finishStopping()
+        wait(for:[shown],timeout:1)
+        runner.physicalInput(39,down:true,binding:binding(10,.showShortcuts))
+        runner.physicalInput(ring,down:true,binding:binding(17,.showShortcuts))
+        runner.physicalInput(39,down:false,binding:nil);runner.finishStopping()
+        XCTAssertEqual(states,[true])
+        runner.physicalInput(ring,down:false,binding:nil);runner.finishStopping()
+        wait(for:[hidden],timeout:1);XCTAssertEqual(states,[true,false])
+    }
+    func testOverlayQuickReleaseCannotReopenAfterMainQueueDelay(){
+        let hidden=expectation(description:"release"),unexpected=expectation(description:"late show");unexpected.isInverted=true
+        let runner=ActionRunner(keyOutput:{_,_,_,_ in},physicalFlags:{0},foregroundPID:{1})
+        runner.shortcutsHeldChanged={visible in if visible{unexpected.fulfill()}else{hidden.fulfill()}}
+        let sequence={
+            runner.down(39,binding:self.binding(10,.showShortcuts));runner.up(39);runner.finishStopping()
+        }
+        if Thread.isMainThread{sequence()}else{DispatchQueue.main.sync(execute:sequence)}
+        wait(for:[hidden,unexpected],timeout:0.05)
+    }
+    func testPausingMappingsClosesAHeldOverlayAndDoesNotEmitKeys(){
+        let shown=expectation(description:"shown"),hidden=expectation(description:"pause hides")
+        let output=Recorder(),runner=ActionRunner(keyOutput:{output.add($0,$1,$2,$3)},physicalFlags:{0},foregroundPID:{1})
+        runner.shortcutsHeldChanged={visible in if visible{shown.fulfill()}else{hidden.fulfill()}}
+        runner.setPhysicalEnabled(true)
+        runner.physicalInput(39,down:true,binding:binding(10,.showShortcuts));runner.finishStopping()
+        wait(for:[shown],timeout:1)
+        runner.setPhysicalEnabled(false);runner.finishStopping()
+        wait(for:[hidden],timeout:1);XCTAssertTrue(output.keys.isEmpty)
+        runner.physicalInput(39,down:false,binding:nil);runner.finishStopping()
     }
     func testRapidActionsPostWithoutServicingTheMainRunLoopAndKeepSharedModifiers(){
         let output=Recorder(),runner=ActionRunner(keyOutput:{output.add($0,$1,$2,$3)},physicalFlags:{0},foregroundPID:{1})

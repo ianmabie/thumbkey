@@ -13,7 +13,7 @@ final class ShortcutOverlayController {
     var onDismiss:(()->Void)?
     var isVisible:Bool{panel?.isVisible == true}
 
-    func show(model:AppModel){
+    func show(model:AppModel,whileHeld:Bool=false){
         dismiss()
         guard let screen=NSScreen.screens.first(where:{$0.frame.contains(NSEvent.mouseLocation)}) ?? NSScreen.main else{return}
         let visible=screen.visibleFrame
@@ -23,16 +23,16 @@ final class ShortcutOverlayController {
         panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=true
         panel.level = .floating;panel.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary]
         panel.hidesOnDeactivate=false;panel.isMovableByWindowBackground=true
-        panel.contentView=NSHostingView(rootView:ShortcutOverlayView(model:model,dismiss:{[weak self] in self?.dismiss()}))
+        panel.contentView=NSHostingView(rootView:ShortcutOverlayView(model:model,whileHeld:whileHeld,dismiss:{[weak self] in self?.dismiss()}))
         panel.setFrameOrigin(NSPoint(x:visible.midX-size.width/2,y:visible.midY-size.height/2))
         self.panel=panel;panel.orderFrontRegardless()
         // Nonactivating: mouse actions and app profiles keep targeting the user's app.
         if let monitor=NSEvent.addGlobalMonitorForEvents(matching:[.keyDown,.leftMouseDown,.rightMouseDown],handler:{[weak self] event in
-            if event.type != .keyDown || event.keyCode==53{self?.dismiss()}
+            if (event.type == .keyDown && event.keyCode==53) || (!whileHeld && event.type != .keyDown){self?.dismiss()}
         }){monitors.append(monitor)}
         if let monitor=NSEvent.addLocalMonitorForEvents(matching:[.keyDown,.leftMouseDown,.rightMouseDown],handler:{[weak self,weak panel] event in
             if event.type == .keyDown,event.keyCode==53{self?.dismiss();return nil}
-            if event.type != .keyDown,event.window !== panel{self?.dismiss()}
+            if !whileHeld,event.type != .keyDown,event.window !== panel{self?.dismiss()}
             return event
         }){monitors.append(monitor)}
     }
@@ -47,6 +47,7 @@ final class ShortcutOverlayController {
 
 private struct ShortcutOverlayView:View {
     @ObservedObject var model:AppModel
+    let whileHeld:Bool
     let dismiss:()->Void
     var body:some View {
         VStack(alignment:.leading,spacing:0){
@@ -92,7 +93,7 @@ private struct ShortcutOverlayView:View {
                 }
             }
             HStack{
-                Text("Press the overlay button again or Esc to close.")
+                Text(whileHeld ? "Release the mouse button to close. Esc dismisses early.":"Preview · press Esc or click outside to close.")
                 Spacer()
                 Text("ThumbKey").fontWeight(.medium)
             }.font(.caption).foregroundStyle(.secondary).padding(.horizontal,22).padding(.bottom,18)
