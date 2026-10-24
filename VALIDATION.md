@@ -1,3 +1,5 @@
+Build 41 installation follow-up (2026-10-23): candidate signature verified; installation is still pending because the old build 40 process could not be closed through native UI automation. Saved bindings and preferences remain unchanged; mappings were paused. A one-second process sample showed the main thread servicing its normal run loop rather than proving an app deadlock. ThumbKey/Finder/loginwindow automation timed out, so a manual quit was requested before replacing the app. No live verification of build 41 is claimed yet.
+
 ## Build 41 — native macOS controls (2026-10-23)
 
 - Moved profile selection, mapping status, refresh, enable/pause, and secondary commands into the system SwiftUI unified toolbar. Selectable mouse-render cards remain in the content area.
