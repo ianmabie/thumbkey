@@ -118,11 +118,14 @@ struct ContentView:View {
             ToolbarItem(placement: .navigation) {
                 Picker("Profile", selection: $model.selectedProfile) {
                     ForEach(model.configuration.profiles) { Text($0.name).tag($0.id) }
-                }.onChange(of: model.selectedProfile) { _, _ in model.cancelLearning() }
+                }.labelsHidden().frame(minWidth: 160, idealWidth: 180)
+                .accessibilityLabel("Profile")
+                .onChange(of: model.selectedProfile) { _, _ in model.cancelLearning() }
             }
             ToolbarItem(placement: .principal) {
-                Label(model.mappingStatus, systemImage: model.secureInputBlocked ? "exclamationmark.triangle" : model.enabled ? "checkmark.circle" : "pause.circle")
-                    .font(.callout).foregroundStyle(model.secureInputBlocked ? Color.orange : Color.secondary)
+                Label(model.mappingStatus, systemImage: model.wantsMappings && model.secureInputBlocked ? "exclamationmark.triangle" : model.enabled ? "checkmark.circle" : "pause.circle")
+                    .labelStyle(.titleAndIcon).fixedSize()
+                    .font(.callout).foregroundStyle(model.wantsMappings && model.secureInputBlocked ? Color.orange : Color.secondary)
             }
             ToolbarItemGroup(placement: .primaryAction) {
                 Button { model.refreshMouseStatus() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
