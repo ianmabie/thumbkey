@@ -63,7 +63,7 @@ private struct ShortcutOverlayView:View {
                 }
                 Spacer()
                 Button(action:dismiss){Image(systemName:"xmark").font(.body.weight(.medium)).frame(width:28,height:28)}
-                    .buttonStyle(.plain).background(Color.primary.opacity(0.06),in:Circle()).accessibilityLabel("Close shortcut overlay")
+                    .buttonStyle(.bordered).buttonBorderShape(.circle).accessibilityLabel("Close shortcut overlay")
             }.padding(22)
             if !model.enabled {
                 Label(model.mappingStatus,systemImage:"pause.circle").font(.callout).foregroundStyle(.orange).padding(.horizontal,22).padding(.bottom,12)
@@ -97,8 +97,6 @@ private struct ShortcutOverlayView:View {
                 Spacer()
                 Text("ThumbKey").fontWeight(.medium)
             }.font(.caption).foregroundStyle(.secondary).padding(.horizontal,22).padding(.bottom,18)
-        }.background(.regularMaterial,in:RoundedRectangle(cornerRadius:20))
-            .overlay(RoundedRectangle(cornerRadius:20).stroke(Color.primary.opacity(0.12),lineWidth:1))
-            .clipShape(RoundedRectangle(cornerRadius:20))
+        }.modifier(SystemFloatingSurface(cornerRadius: 20))
     }
 }

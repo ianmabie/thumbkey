@@ -2,6 +2,10 @@
 
 A small, local macOS app for mapping Razer Naga and Logitech MX Master 3S buttons to shortcuts, held keys, typed text, and macros. Native SwiftUI, macOS 14+, no dependencies, accounts, or network requests.
 
+## Native macOS interface
+
+The main window uses a standard SwiftUI unified toolbar for profiles, status, refresh, mapping controls, and import/export. Mouse render cards remain directly selectable. Editing uses a grouped native Form; List view uses standard selectable rows with keyboard navigation. View angles use a native segmented picker that also shows Custom after manual rotation. Shortcut recording uses a SwiftUI button with an AppKit keyboard responder, preserving individual modifier keys such as Right Command. The floating shortcut overlay uses system Liquid Glass on macOS 26 or later, with regular-material and Reduce Transparency fallbacks. SceneKit and input capture retain their platform bridges.
+
 ## Use
 
 Build with `Scripts/build-app.sh`, then open `../ThumbKey.app`. Grant **Input Monitoring** (reads button input) and **Accessibility** (sends shortcuts). Enable mappings in the window. ThumbKey remembers whether mappings were enabled across relaunches, sleep, and reconnects. Pause releases held keys and restores normal mouse reporting.

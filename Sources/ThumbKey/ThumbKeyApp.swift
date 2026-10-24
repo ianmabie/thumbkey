@@ -49,7 +49,8 @@ final class ThumbKeyAppDelegate:NSObject,NSApplicationDelegate {
     }
     var body:some Scene {
         Window("ThumbKey",id:"main") {ContentView().environmentObject(model).frame(minWidth:920,minHeight:680)}
-            .defaultSize(width:1020,height:760)
+            .defaultSize(width:1100,height:800)
+            .windowToolbarStyle(.unified)
             .commands {CommandGroup(replacing:.newItem){};CommandGroup(after:.appSettings){Button(model.wantsMappings ? "Pause mappings":"Enable mappings"){model.toggleEnabled()}.keyboardShortcut("p",modifiers:[.command,.option,.control])}}
         MenuBarExtra("ThumbKey",systemImage:model.enabled ? "circle.grid.3x3.fill":"exclamationmark.circle") {
             MenuControls().environmentObject(model)
@@ -85,16 +86,10 @@ struct ContentView:View {
     private let accent=Color(red:0.04,green:0.46,blue:0.37)
     var body:some View {
         VStack(spacing:0) {
-            HStack(spacing:18){
-                VStack(alignment:.leading,spacing:5){Text("ThumbKey").font(.title2.bold());Text("Your mouse. Your shortcuts.").font(.caption).foregroundStyle(.secondary)}
-                HStack(spacing:10){ForEach(MouseFamily.allCases){family in MouseDeviceCard(family:family)}}
-                Spacer(minLength:0)
-                VStack(alignment:.trailing,spacing:10){
-                    Label(model.mappingStatus,systemImage:model.wantsMappings && model.secureInputBlocked ? "exclamationmark.triangle.fill":model.enabled ? "circle.fill":"pause.circle").foregroundStyle(model.wantsMappings && model.secureInputBlocked ? Color.orange:model.enabled ? accent:Color.secondary).font(.caption.weight(.medium))
-                    HStack{Button{model.refreshMouseStatus()}label:{Image(systemName:"arrow.clockwise")}.buttonStyle(.plain).help("Refresh mouse batteries and connections")
-                        Button(model.wantsMappings ? "Pause":"Enable mappings"){model.toggleEnabled()}.buttonStyle(.borderedProminent).tint(accent)}
-                }
-            }.padding(.horizontal,24).padding(.vertical,16)
+            HStack(spacing: 12) {
+                ForEach(MouseFamily.allCases) { family in MouseDeviceCard(family: family) }
+                Spacer(minLength: 0)
+            }.padding(.horizontal, 20).padding(.vertical, 14)
             Divider()
             if model.noMouseDetected {
                 HStack(spacing:12){
@@ -110,23 +105,48 @@ struct ContentView:View {
             if !model.inputAllowed || !model.accessibilityAllowed {
                 HStack(alignment:.center,spacing:16){Image(systemName:"hand.raised").font(.title2);VStack(alignment:.leading,spacing:4){Text("Allow ThumbKey to remap your side pad").font(.headline);Text("Input Monitoring reads mouse buttons. Accessibility sends your chosen shortcuts.").font(.caption).foregroundStyle(.secondary)};Spacer();Button(model.inputAllowed ? "Input Monitoring ✓":"Allow Input Monitoring"){model.requestInput()}.disabled(model.inputAllowed);Button(model.accessibilityAllowed ? "Accessibility ✓":"Allow Accessibility"){model.requestAccessibility()}.disabled(model.accessibilityAllowed)}.padding(16).background(accent.opacity(0.06));Divider()
             }
-            HStack(spacing:12){
-                Text("Profile").foregroundStyle(.secondary)
-                Picker("Profile",selection:$model.selectedProfile){ForEach(model.configuration.profiles){p in Text(p.name).tag(p.id)}}.labelsHidden().frame(width:210).onChange(of:model.selectedProfile){_,_ in model.cancelLearning()}
-                Menu {ForEach(model.availableApps(),id:\.processIdentifier){app in Button(app.localizedName ?? app.bundleIdentifier ?? "App"){model.addProfile(app)}}} label:{Label("Add app profile",systemImage:"plus")}
-                if model.profileIndex>0 {Button("Remove profile"){model.removeProfile()}.foregroundStyle(.secondary)}
-                Spacer()
-                Menu{Button("Export mappings…"){model.exportSettings()};Button("Import mappings…"){model.importSettings()}}label:{Image(systemName:"ellipsis.circle")}.menuStyle(.borderlessButton).frame(width:30)
-            }.padding(.horizontal,24).padding(.vertical,14)
-            Divider()
             HSplitView {
                 ButtonMapView().frame(minWidth:410,idealWidth:460,maxWidth:560)
-                ScrollView{ButtonEditor().padding(24)}.frame(minWidth:360,maxWidth:.infinity)
+                ButtonEditor().frame(minWidth:360,maxWidth:.infinity)
             }
             if !model.message.isEmpty || !model.saveError.isEmpty {
                 Divider();HStack{Image(systemName:model.saveError.isEmpty ? "info.circle":"exclamationmark.triangle");Text(model.saveError.isEmpty ? model.message:model.saveError).font(.callout);Spacer();if model.learning != nil{Button("Cancel"){model.cancelLearning()}}else{Button{model.message=""}label:{Image(systemName:"xmark")}.buttonStyle(.plain)}}.padding(14).background(Color(nsColor:.controlBackgroundColor))
             }
         }.background(Color(nsColor:.windowBackgroundColor)).tint(accent)
+        .navigationTitle("ThumbKey")
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Picker("Profile", selection: $model.selectedProfile) {
+                    ForEach(model.configuration.profiles) { Text($0.name).tag($0.id) }
+                }.onChange(of: model.selectedProfile) { _, _ in model.cancelLearning() }
+            }
+            ToolbarItem(placement: .principal) {
+                Label(model.mappingStatus, systemImage: model.secureInputBlocked ? "exclamationmark.triangle" : model.enabled ? "checkmark.circle" : "pause.circle")
+                    .font(.callout).foregroundStyle(model.secureInputBlocked ? Color.orange : Color.secondary)
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button { model.refreshMouseStatus() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    .help("Refresh mouse batteries and connections")
+                Menu {
+                    Section("Profiles") {
+                        ForEach(model.availableApps(), id: \.processIdentifier) { app in
+                            Button("Add " + (app.localizedName ?? app.bundleIdentifier ?? "App")) { model.addProfile(app) }
+                        }
+                        if model.profileIndex > 0 { Button("Remove current profile") { model.removeProfile() } }
+                    }
+                    Section {
+                        Button("Show shortcut overlay") { model.toggleShortcutOverlay() }
+                        Button("Release held keys & pause") { model.pause() }
+                    }
+                    Section {
+                        Button("Export mappings…") { model.exportSettings() }
+                        Button("Import mappings…") { model.importSettings() }
+                    }
+                } label: { Label("More", systemImage: "ellipsis") }
+                Button(model.wantsMappings ? "Pause mappings" : "Enable mappings") { model.toggleEnabled() }
+                    .buttonStyle(.borderedProminent).tint(accent)
+            }
+        }
     }
 }
 struct ButtonMapView:View {
@@ -141,8 +161,30 @@ struct ButtonMapView:View {
             }.pickerStyle(.segmented).accessibilityLabel("Button map view")
                 .padding(.horizontal,24).padding(.vertical,14)
             Divider()
-            ScrollView{mapContent.padding(24)}.id(showsList)
+            if showsList {
+                List(selection: Binding<Int?>(get: { model.selectedButton }, set: { if let id = $0 { model.select(id) } })) {
+                    Section(model.selectedMouse == .naga ? "Side buttons" : "MX Master 3S buttons") {
+                        ForEach(model.sideButtons) { button in mappingRow(button).tag(button.id) }
+                    }
+                    if model.selectedMouse == .naga {
+                        Section("Top & ring-finger buttons") {
+                            ForEach(model.extraButtons) { button in mappingRow(button).tag(button.id) }
+                        }
+                    }
+                    Section("Mouse options") { mapContent }
+                }.listStyle(.inset).id(model.selectedMouse)
+            } else {
+                ScrollView { mapContent.padding(24) }
+            }
         }
+    }
+    private func mappingRow(_ button: ButtonBinding) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(MouseControls.title(button.id)).font(.callout.weight(.medium))
+            Text(button.name.isEmpty ? button.detail : button.name + " · " + button.detail)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            if let issue = model.buttonIssue(button) { Text(issue).font(.caption).foregroundStyle(.orange) }
+        }.padding(.vertical, 5)
     }
     private var mapContent:some View {
         VStack(alignment:.leading,spacing:18){
@@ -156,12 +198,6 @@ struct ButtonMapView:View {
                     }.pickerStyle(.segmented)
                     Text("Select the attached plate after swapping it. Each plate saves its own mappings; automatic detection is not available yet.").font(.caption).foregroundStyle(.secondary)
                 }
-                if showsList {
-                    Text("SIDE BUTTONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    VStack(spacing:8){ForEach(model.sideButtons){button in ButtonTile(button:button,compact:true)}}
-                    Text("TOP & RING-FINGER BUTTONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    VStack(spacing:8){ForEach(model.extraButtons){button in ButtonTile(button:button,compact:true)}}
-                }
                 Divider()
                 DisclosureGroup("Extra-button reporting",isExpanded:$reportingExpanded){
                     VStack(alignment:.leading,spacing:10){
@@ -170,10 +206,6 @@ struct ButtonMapView:View {
                     }.padding(.top,8)
                 }
             } else {
-                if showsList {
-                    Text("MX MASTER 3S BUTTONS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    VStack(spacing:8){ForEach(model.sideButtons){button in ButtonTile(button:button,compact:true)}}
-                }
                 Label("Scrolling and primary clicks keep working normally.",systemImage:"cursorarrow").font(.caption).foregroundStyle(.secondary)
             }
             if let last=model.lastButton{Label("Last press: \(MouseControls.title(last))",systemImage:"checkmark.circle").font(.caption).foregroundStyle(.teal)}
@@ -182,31 +214,12 @@ struct ButtonMapView:View {
     }
 }
 
-struct ButtonTile:View {
-    @EnvironmentObject var model:AppModel
-    let button:ButtonBinding
-    var compact=false
-    private var selected:Bool{model.selectedButton==button.id}
-    private let accent=Color(red:0.04,green:0.46,blue:0.37)
-    var body:some View {
-        Button{model.select(button.id)}label:{
-            Group {
-                if compact {
-                    HStack(spacing:12){Text("\(button.id>=301 ? button.id-300:MouseControls.number(button.id))").font(.caption.weight(.bold)).frame(width:25,height:25).background(selected ? accent.opacity(0.15):Color.primary.opacity(0.06),in:Circle()).foregroundStyle(selected ? accent:Color.secondary);VStack(alignment:.leading,spacing:4){Text(MouseControls.title(button.id)).font(.subheadline.weight(.medium));Text(button.name.isEmpty ? button.detail:button.name + " · " + button.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2);if let issue=model.buttonIssue(button){Text(issue).font(.caption2).foregroundStyle(.orange).lineLimit(2)}};Spacer();if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(accent)}}
-                } else {
-                    VStack(alignment:.leading,spacing:8){HStack{Text("\(MouseControls.number(button.id))").font(.system(size:26,weight:.semibold,design:.rounded));Spacer();if selected{Image(systemName:"checkmark.circle.fill").foregroundStyle(accent)}};Text(button.title).font(.subheadline.weight(.medium)).lineLimit(1);Text(button.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)}.frame(minHeight:80)
-                }
-            }.padding(14).frame(maxWidth:.infinity,alignment:.leading)
-                .background(selected ? accent.opacity(0.10):Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:12))
-                .overlay(RoundedRectangle(cornerRadius:12).stroke(selected ? accent:Color.primary.opacity(0.1),lineWidth:selected ? 2:1))
-        }.buttonStyle(.plain).accessibilityLabel("\(MouseControls.title(button.id)), \(button.title), \(button.detail)")
-    }
-}
 struct ButtonEditor:View {
     @EnvironmentObject var model:AppModel
     func field<T>(_ key:WritableKeyPath<ButtonBinding,T>)->Binding<T>{Binding(get:{model.button[keyPath:key]},set:{value in model.editButton{$0[keyPath:key]=value}})}
     var body:some View {
-        VStack(alignment:.leading,spacing:20){
+        Form {
+            Section {
             HStack{VStack(alignment:.leading,spacing:5){Text(MouseControls.title(model.selectedButton)).font(.title2.bold());Text(model.profileIndex==0 ? "Used everywhere unless an app profile overrides it.":"Used when \(model.profile.name) is the active app.").font(.caption).foregroundStyle(.secondary)};Spacer()}
             if let issue=model.buttonIssue(model.button) {
                 VStack(alignment:.leading,spacing:8){
@@ -217,8 +230,10 @@ struct ButtonEditor:View {
                     }
                 }.padding(12).frame(maxWidth:.infinity,alignment:.leading).background(Color.orange.opacity(0.08),in:RoundedRectangle(cornerRadius:10))
             }
-            VStack(alignment:.leading,spacing:6){Text("Name (optional)").font(.subheadline.weight(.medium));TextField("What does this button do?",text:field(\.name)).textFieldStyle(.roundedBorder)}
-            VStack(alignment:.leading,spacing:6){Text("Action").font(.subheadline.weight(.medium));Picker("Action",selection:field(\.mode)){ForEach(ActionMode.customActions,id:\.self){Text($0.label).tag($0)};Divider();Section("macOS actions"){ForEach(ActionMode.macOSActions,id:\.self){Text($0.label).tag($0)}};Divider();Section("Figma"){ForEach(ActionMode.figmaActions,id:\.self){Text($0.label).tag($0)}};Divider();Section("ThumbKey"){ForEach(ActionMode.thumbKeyActions,id:\.self){Text($0.label).tag($0)}}}.labelsHidden();Text(model.button.mode.explanation).font(.callout).foregroundStyle(.secondary)}
+            }
+            Section("Assignment") {
+            TextField("Name", text: field(\.name), prompt: Text("Optional"))
+            VStack(alignment:.leading,spacing:6){Picker("Action",selection:field(\.mode)){ForEach(ActionMode.customActions,id:\.self){Text($0.label).tag($0)};Divider();Section("macOS actions"){ForEach(ActionMode.macOSActions,id:\.self){Text($0.label).tag($0)}};Divider();Section("Figma"){ForEach(ActionMode.figmaActions,id:\.self){Text($0.label).tag($0)}};Divider();Section("ThumbKey"){ForEach(ActionMode.thumbKeyActions,id:\.self){Text($0.label).tag($0)}}};Text(model.button.mode.explanation).font(.callout).foregroundStyle(.secondary)}
             if model.button.mode == .passthrough && !model.button.chord.isEmpty {
                 Text("This button sends its default input. The saved shortcut (" + model.button.chord.label + ") is inactive; choose Hold keys while pressed or Press a shortcut once to use it.").font(.caption).foregroundStyle(.orange)
             }
@@ -270,9 +285,9 @@ struct ButtonEditor:View {
                 Text("This extra button has no ThumbKey action yet. In extra-button reporting mode, its firmware action may be unavailable. Choose an action above.").font(.caption).foregroundStyle(.secondary)
             }
             if model.button.mode == .macro {MacroEditor()}
-            Divider()
+            }
+            Section("Physical button") {
             VStack(alignment:.leading,spacing:8){
-                Text("Which mouse button?").font(.subheadline.weight(.medium))
                 Text(MouseControls.location(model.selectedButton)).font(.callout).foregroundStyle(.secondary)
                 if model.button.usage==nil{Label("Needs identification before it can be mapped",systemImage:"questionmark.circle").font(.caption).foregroundStyle(.orange)}
                 if model.selectedMouse == .naga {
@@ -291,8 +306,8 @@ struct ButtonEditor:View {
                 }.font(.caption)
             }
 
-            Spacer()
-        }.frame(maxWidth:.infinity,alignment:.leading)
+            }
+        }.formStyle(.grouped)
     }
 }
 struct MacroEditor:View {

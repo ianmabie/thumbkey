@@ -8,20 +8,29 @@ struct ShortcutRecorder:NSViewRepresentable {
     func makeNSView(context:Context)->Recorder {
         let v=Recorder();v.changed={chord=$0};v.recordingChanged=onRecording;return v
     }
-    func updateNSView(_ v:Recorder,context:Context){v.canRecord=context.environment.isEnabled;v.chord=chord;v.changed={chord=$0};v.recordingChanged=onRecording;v.needsDisplay=true;v.setAccessibilityLabel("Shortcut: \(chord.label). Click to record.")}
+    func updateNSView(_ v:Recorder,context:Context){v.canRecord=context.environment.isEnabled;v.chord=chord;v.changed={chord=$0};v.recordingChanged=onRecording;v.needsDisplay=true}
     final class Recorder:NSView {
-        var chord=Chord(),recording=false,seenModifiers=Modifiers()
-        var canRecord=true {didSet{if !canRecord{finish(nil)}}}
+        var chord = Chord() { didSet { refreshButton() } }
+        var recording = false { didSet { refreshButton() } }
+        var seenModifiers = Modifiers()
+        private var hosting: NSHostingView<ShortcutRecorderButton>?
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            let host = NSHostingView(rootView: button)
+            host.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(host); hosting = host
+            NSLayoutConstraint.activate([host.leadingAnchor.constraint(equalTo: leadingAnchor), host.trailingAnchor.constraint(equalTo: trailingAnchor), host.topAnchor.constraint(equalTo: topAnchor), host.bottomAnchor.constraint(equalTo: bottomAnchor)])
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        private var button: ShortcutRecorderButton { ShortcutRecorderButton(label: chord.label, recording: recording, enabled: canRecord, begin: { [weak self] in self?.beginRecording() }) }
+        private func refreshButton() { hosting?.rootView = button }
+        func beginRecording() { guard canRecord else { return }; window?.makeFirstResponder(self); recording = true; seenModifiers = []; seenModifierKeys = []; recordingChanged?(true) }
+        var canRecord=true {didSet{if !canRecord{finish(nil)};refreshButton()}}
         var seenModifierKeys=Set<UInt16>()
         var changed:((Chord)->Void)?,recordingChanged:((Bool)->Void)?
         override var acceptsFirstResponder:Bool{true}
-        override func mouseDown(with event:NSEvent){guard canRecord else{return};window?.makeFirstResponder(self);recording=true;seenModifiers=[];seenModifierKeys=[];recordingChanged?(true);needsDisplay=true}
+        override func mouseDown(with event:NSEvent){beginRecording()}
         override func resignFirstResponder()->Bool{finish(nil);return super.resignFirstResponder()}
-        override func draw(_ rect:NSRect){
-            (recording ? NSColor.controlAccentColor.withAlphaComponent(0.1) : NSColor.controlBackgroundColor).setFill();NSBezierPath(roundedRect:bounds,xRadius:8,yRadius:8).fill()
-            let text=recording ? "Press your keys, then release · Esc cancels" : chord.label + "  ·  click to change"
-            text.draw(at:NSPoint(x:12,y:10),withAttributes:[.font:NSFont.systemFont(ofSize:13,weight:.medium),.foregroundColor:NSColor.labelColor])
-        }
         func flags(_ event:NSEvent)->Modifiers{
             var m=Modifiers();let f=event.modifierFlags
             if f.contains(.command){m.insert(.command)};if f.contains(.control){m.insert(.control)};if f.contains(.option){m.insert(.option)};if f.contains(.shift){m.insert(.shift)};return m
@@ -44,6 +53,6 @@ struct ShortcutRecorder:NSViewRepresentable {
             finish(Chord(keyCode:event.keyCode,modifiers:flags(event),keyLabel:labels[event.keyCode] ?? event.charactersIgnoringModifiers?.uppercased() ?? "Key \(event.keyCode)"))
         }
         private func finish(_ result:Chord?){guard recording else{return};recording=false;if let result{changed?(result)};recordingChanged?(false);needsDisplay=true}
-        override func viewDidMoveToWindow(){setAccessibilityElement(true);setAccessibilityRole(.button)}
+        override func viewDidMoveToWindow(){setAccessibilityElement(false)}
     }
 }

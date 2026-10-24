@@ -1,3 +1,11 @@
+## Build 41 — native macOS controls (2026-10-23)
+
+- Moved profile selection, mapping status, refresh, enable/pause, and secondary commands into the system SwiftUI unified toolbar. Selectable mouse-render cards remain in the content area.
+- The assignment editor uses a grouped SwiftUI Form; button List view uses native List selection. The camera presets use a standard segmented picker, including Custom after manual rotation. Native list selection and camera gestures still require live UI checks.
+- Shortcut recorders now render SwiftUI system buttons, retaining AppKit only for keyboard-event capture. The shortcut overlay uses system Liquid Glass on macOS 26+ with material and Reduce Transparency fallbacks; its press/hold lifecycle is unchanged.
+- All 60 tests passed (43 core and 17 runtime), including three new recorder tests for completion/cancel/disabled behavior and physical Right Command capture. Signed release build and strict signature verification passed. Bindings/preferences were snapshotted before installation.
+- Live installation and visual checks were initially blocked because the Mac was locked; no fresh physical mouse-press validation is claimed by automated tests.
+
 Hold-to-show shortcut overlay, version 0.3.0 build 40 (October 21, 2026):
 
 - Changed the existing Show shortcut overlay action to show on physical button-down and dismiss on release. This covers both the user’s ring-finger and side button 10 assignments without rewriting saved bindings. Concurrent overlay holds share visibility until the last release; repeated down reports do not toggle or reopen it. Main-queue visibility callbacks are revision-checked, so an already-released quick press cannot open a delayed overlay. Pausing/resetting capture clears held visibility. Keyboard output and other held actions are unchanged.

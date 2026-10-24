@@ -56,13 +56,13 @@ struct MouseMappingScene:View {
     var body:some View {
         VStack(spacing:8){
             HStack{Text(model.selectedMouse == .naga ? "BUTTON MAP · \(model.sidePlate.rawValue)-BUTTON PLATE":"BUTTON MAP").font(.caption.weight(.semibold)).foregroundStyle(.secondary);Spacer();Button{angle = .overview;manuallyRotated=false;cameraRequest=UUID()}label:{Image(systemName:"arrow.counterclockwise")}.buttonStyle(.plain).help("Reset 3D view")}
-            HStack(spacing:2){ForEach(MouseViewAngle.allCases){preset in
-                Button{angle=preset;manuallyRotated=false;cameraRequest=UUID()}label:{
-                    Text(preset.title).font(.caption).frame(maxWidth:.infinity).padding(.vertical,5)
-                        .background(!manuallyRotated && angle==preset ? Color(nsColor:.controlBackgroundColor):Color.clear,in:RoundedRectangle(cornerRadius:5))
-                }.buttonStyle(.plain).accessibilityLabel(preset.title)
-                    .accessibilityAddTraits(!manuallyRotated && angle==preset ? .isSelected:[])
-            }}.padding(3).background(Color.primary.opacity(0.06),in:RoundedRectangle(cornerRadius:8))
+            Picker("View angle", selection: Binding<MouseViewAngle?>(
+                get: { manuallyRotated ? nil : angle },
+                set: { if let preset = $0 { angle = preset; manuallyRotated = false; cameraRequest = UUID() } }
+            )) {
+                if manuallyRotated { Text("Custom").tag(Optional<MouseViewAngle>.none) }
+                ForEach(MouseViewAngle.allCases) { preset in Text(preset.title).tag(Optional(preset)) }
+            }.pickerStyle(.segmented).labelsHidden()
             MouseSceneView(family:model.selectedMouse,plate:model.sidePlate,selected:model.selectedButton,interactive:true,angle:angle,cameraRequest:cameraRequest,onRotate:{manuallyRotated=true},onSelect:model.select)
                 .accessibilityLabel("Rotatable 3D mouse illustration. Switch to List view to select a mapping with the keyboard.")
             HStack(spacing:5){Text("Drag to rotate");Spacer();Text("3D illustration").help("Built-in illustration with approximate button positions, not a manufacturer scan.")}.font(.system(size:10)).foregroundStyle(.secondary)
